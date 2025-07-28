@@ -36,5 +36,8 @@ jobs:
       - name: Typecheck
         run: pnpm run typecheck
 
+      - name: Format
+        run: pnpm run fmt && git diff --exit-code
+
       - name: Test
         run: pnpm run test

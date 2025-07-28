@@ -1,16 +1,16 @@
 {
-  "name": "connectrpc-grpcreflect-es",
+  "name": "@lambdalisue/connectrpc-grpcreflect",
   "version": "0.0.0",
   "description": "A connect-es module for gRPC reflection",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://github.com/lambdalisue/connectrpc-grpcreflect-es#readme",
+  "homepage": "https://github.com/lambdalisue/ts-connectrpc-grpcreflect#readme",
   "bugs": {
-    "url": "https://github.com/lambdalisue/connectrpc-grpcreflect-es/issues"
+    "url": "https://github.com/lambdalisue/ts-connectrpc-grpcreflect/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/lambdalisue/connectrpc-grpcreflect-es.git"
+    "url": "git+https://github.com/lambdalisue/ts-connectrpc-grpcreflect.git"
   },
   "author": "Alisue <lambdalisue@gmail.com>",
   "files": [

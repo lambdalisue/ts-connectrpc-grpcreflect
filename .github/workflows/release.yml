@@ -16,11 +16,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          version: latest
+
       - name: Set node
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
           registry-url: https://registry.npmjs.org/
+
+      - name: Install
+        run: pnpm install
+
+      - name: Build
+        run: pnpm run build
 
       - run: npx changelogithub
         env:

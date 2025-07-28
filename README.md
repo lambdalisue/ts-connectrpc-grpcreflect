@@ -1,6 +1,8 @@
 # @lambdalisue/connectrpc-grpcreflect
 
-Server Reflection implementation for gRPC in ConnectRPC for ECMAScript/TypeScript.
+[![Unit Test](https://github.com/lambdalisue/ts-connectrpc-grpcreflect/actions/workflows/unit-test.yml/badge.svg)](https://github.com/lambdalisue/ts-connectrpc-grpcreflect/actions/workflows/unit-test.yml)
+
+Server Reflection implementation for gRPC in [ConnectRPC](https://connectrpc.com/) for ECMAScript/TypeScript.
 
 ## Overview
 
@@ -17,9 +19,9 @@ npm install @lambdalisue/connectrpc-grpcreflect
 ### Basic Usage
 
 ```typescript
-import { ConnectRouter } from '@connectrpc/connect';
-import { registerServerReflectionFromFileDescriptorSet } from '@lambdalisue/connectrpc-grpcreflect';
-import { fileDescriptorSet } from './generated/descriptor_pb.js';
+import { ConnectRouter } from "@connectrpc/connect";
+import { registerServerReflectionFromFileDescriptorSet } from "@lambdalisue/connectrpc-grpcreflect";
+import { fileDescriptorSet } from "./generated/descriptor_pb.js";
 
 const router = new ConnectRouter();
 // ... register your services
@@ -31,19 +33,21 @@ registerServerReflectionFromFileDescriptorSet(router, fileDescriptorSet);
 ### From Binary File
 
 ```typescript
-import { registerServerReflectionFromFile } from '@lambdalisue/connectrpc-grpcreflect';
+import { registerServerReflectionFromFile } from "@lambdalisue/connectrpc-grpcreflect";
 
 // Load FileDescriptorSet from a binary file
-registerServerReflectionFromFile(router, './path/to/descriptor.binpb');
+registerServerReflectionFromFile(router, "./path/to/descriptor.binpb");
 ```
 
 ### From Uint8Array
 
 ```typescript
-import { registerServerReflectionFromUint8Array } from '@lambdalisue/connectrpc-grpcreflect';
+import { registerServerReflectionFromUint8Array } from "@lambdalisue/connectrpc-grpcreflect";
 
 // Load from binary data
-const binaryData = await fetch('/api/descriptor').then(res => res.arrayBuffer());
+const binaryData = await fetch("/api/descriptor").then((res) =>
+  res.arrayBuffer(),
+);
 registerServerReflectionFromUint8Array(router, new Uint8Array(binaryData));
 ```
 

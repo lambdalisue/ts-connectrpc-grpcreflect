@@ -64,6 +64,34 @@ export interface MethodDescriptor {
 /**
  * Error thrown by reflection client operations.
  */
+/**
+ * Cache statistics for monitoring cache performance.
+ */
+export interface CacheStats {
+  /**
+   * Number of cache hits.
+   */
+  hits: number;
+
+  /**
+   * Number of cache misses.
+   */
+  misses: number;
+
+  /**
+   * Number of entries in the file cache.
+   */
+  fileEntries: number;
+
+  /**
+   * Number of entries in the service cache.
+   */
+  serviceEntries: number;
+}
+
+/**
+ * Error thrown by reflection client operations.
+ */
 export class ReflectionError extends Error {
   /**
    * The gRPC error code.

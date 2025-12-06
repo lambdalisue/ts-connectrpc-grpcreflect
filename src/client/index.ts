@@ -5,10 +5,14 @@ import { ServerReflectionClient } from "./v1.js";
 // Re-export main client class
 export { ServerReflectionClient } from "./v1.js";
 
+// Re-export cached client
+export { CachedServerReflectionClient } from "./cached.js";
+
 // Re-export types
 export type {
   ServiceDescriptor,
   MethodDescriptor,
+  CacheStats,
 } from "./types.js";
 export { ReflectionError } from "./types.js";
 

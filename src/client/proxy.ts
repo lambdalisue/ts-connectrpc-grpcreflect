@@ -1,3 +1,4 @@
+import type { CallOptions } from "@connectrpc/connect";
 import type { MethodInvoker } from "./invoker.js";
 
 /**
@@ -7,6 +8,7 @@ import type { MethodInvoker } from "./invoker.js";
 export type DynamicServiceProxy = {
   [methodName: string]: (
     requestOrRequests: unknown | AsyncIterable<unknown>,
+    options?: CallOptions,
   ) => Promise<unknown> | AsyncIterable<unknown>;
 };
 
@@ -15,6 +17,7 @@ export type DynamicServiceProxy = {
  *
  * @param invoker - The MethodInvoker to use for method calls
  * @param serviceName - The fully-qualified service name
+ * @param mergeSignals - Optional function to merge user signals with internal abort signal
  * @returns A proxy object that allows calling methods by name
  *
  * @example
@@ -36,17 +39,30 @@ export type DynamicServiceProxy = {
  * for await (const msg of proxy.sayBidi(requests())) {
  *   console.log(msg);
  * }
+ *
+ * // With cancellation
+ * const controller = new AbortController();
+ * const response = await proxy.say({ sentence: "Hello" }, { signal: controller.signal });
  * ```
  */
 export function createServiceProxy(
   invoker: MethodInvoker,
   serviceName: string,
+  mergeSignals?: (userSignal?: AbortSignal) => AbortSignal,
 ): DynamicServiceProxy {
   return new Proxy({} as DynamicServiceProxy, {
     get(_target, methodName: string) {
       // Return a function that invokes the method
-      return (requestOrRequests: unknown | AsyncIterable<unknown>) => {
+      return (
+        requestOrRequests: unknown | AsyncIterable<unknown>,
+        options?: CallOptions,
+      ) => {
         const path = `${serviceName}/${methodName}`;
+
+        // Merge signals if function is provided
+        const mergedOptions: CallOptions | undefined = mergeSignals
+          ? { ...options, signal: mergeSignals(options?.signal) }
+          : options;
 
         // Detect if input is an async iterable (for streaming methods)
         const isAsyncIterable =
@@ -61,11 +77,12 @@ export function createServiceProxy(
           return invoker.bidiStream(
             path,
             requestOrRequests as AsyncIterable<unknown>,
+            mergedOptions,
           );
         } else {
           // For single input, try call first (unary or server streaming)
           // The invoker will handle the actual method kind
-          return invoker.call(path, requestOrRequests);
+          return invoker.call(path, requestOrRequests, mergedOptions);
         }
       };
     },

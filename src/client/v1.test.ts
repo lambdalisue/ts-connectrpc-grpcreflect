@@ -437,5 +437,85 @@ describe("ServerReflectionClient (v1)", () => {
         client.listServices({ signal: abortController.signal }),
       ).rejects.toThrow();
     });
+
+    it("should accept signal option in call()", async () => {
+      const abortController = new AbortController();
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      // First verify call works without signal
+      const responses = client.bidiStream(
+        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+        requests(),
+        { signal: abortController.signal },
+      );
+
+      const results: unknown[] = [];
+      for await (const response of responses) {
+        results.push(response);
+        break; // Only need first response
+      }
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it("should cancel bidiStream when signal is aborted", async () => {
+      const abortController = new AbortController();
+      // Abort immediately
+      abortController.abort();
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      const responses = client.bidiStream(
+        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+        requests(),
+        { signal: abortController.signal },
+      );
+
+      await expect(async () => {
+        for await (const _response of responses) {
+          // Should not reach here
+        }
+      }).rejects.toThrow();
+    });
+
+    it("should accept signal option in service() proxy", async () => {
+      const abortController = new AbortController();
+
+      const proxy = client.service("grpc.reflection.v1.ServerReflection");
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      const responses = proxy.serverReflectionInfo(requests(), {
+        signal: abortController.signal,
+      });
+
+      const results: unknown[] = [];
+      for await (const response of responses as AsyncIterable<unknown>) {
+        results.push(response);
+        break; // Only need first response
+      }
+      expect(results.length).toBeGreaterThan(0);
+    });
   });
 });

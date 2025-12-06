@@ -534,6 +534,7 @@ export class ServerReflectionClient implements AsyncDisposable {
    *
    * @param path - Full method path (e.g., "grpc.echo.EchoService/Say")
    * @param request - Request data as plain object
+   * @param options - Optional call options including signal for cancellation
    * @returns Response as plain object
    * @throws {ReflectionError} If the method is not found or the request fails or client is disposed
    *
@@ -542,13 +543,26 @@ export class ServerReflectionClient implements AsyncDisposable {
    * const response = await client.call("grpc.echo.EchoService/Say", {
    *   sentence: "Hello, world!",
    * });
+   *
+   * // With cancellation
+   * const controller = new AbortController();
+   * const response = await client.call("grpc.echo.EchoService/Say", {
+   *   sentence: "Hello, world!",
+   * }, { signal: controller.signal });
    * ```
    */
-  async call(path: string, request: unknown): Promise<unknown> {
+  async call(
+    path: string,
+    request: unknown,
+    options?: CallOptions,
+  ): Promise<unknown> {
     this.#ensureNotDisposed();
 
     const invoker = await this.#getInvoker();
-    return invoker.call(path, request);
+    return invoker.call(path, request, {
+      ...options,
+      signal: this.#mergeSignals(options?.signal),
+    });
   }
 
   /**
@@ -556,6 +570,7 @@ export class ServerReflectionClient implements AsyncDisposable {
    *
    * @param path - Full method path
    * @param request - Request data as plain object
+   * @param options - Optional call options including signal for cancellation
    * @returns Async iterable of response objects
    * @throws {ReflectionError} If the method is not found or the request fails
    *
@@ -566,21 +581,37 @@ export class ServerReflectionClient implements AsyncDisposable {
    * })) {
    *   console.log(response);
    * }
+   *
+   * // With cancellation
+   * const controller = new AbortController();
+   * for await (const response of client.serverStream("grpc.echo.EchoService/SayStream", {
+   *   sentence: "Hello",
+   * }, { signal: controller.signal })) {
+   *   console.log(response);
+   * }
    * ```
    */
-  serverStream(path: string, request: unknown): AsyncIterable<unknown> {
+  serverStream(
+    path: string,
+    request: unknown,
+    options?: CallOptions,
+  ): AsyncIterable<unknown> {
     // We need to return an async iterable immediately, so we wrap with an async generator
-    return this.#createServerStream(path, request);
+    return this.#createServerStream(path, request, options);
   }
 
   async *#createServerStream(
     path: string,
     request: unknown,
+    options?: CallOptions,
   ): AsyncIterable<unknown> {
     this.#ensureNotDisposed();
 
     const invoker = await this.#getInvoker();
-    yield* invoker.serverStream(path, request);
+    yield* invoker.serverStream(path, request, {
+      ...options,
+      signal: this.#mergeSignals(options?.signal),
+    });
   }
 
   /**
@@ -588,6 +619,7 @@ export class ServerReflectionClient implements AsyncDisposable {
    *
    * @param path - Full method path
    * @param requests - Async iterable of request data objects
+   * @param options - Optional call options including signal for cancellation
    * @returns Response as plain object
    * @throws {ReflectionError} If the method is not found or the request fails or client is disposed
    *
@@ -601,16 +633,28 @@ export class ServerReflectionClient implements AsyncDisposable {
    *   "grpc.echo.EchoService/SayClientStream",
    *   generateRequests(),
    * );
+   *
+   * // With cancellation
+   * const controller = new AbortController();
+   * const response = await client.clientStream(
+   *   "grpc.echo.EchoService/SayClientStream",
+   *   generateRequests(),
+   *   { signal: controller.signal },
+   * );
    * ```
    */
   async clientStream(
     path: string,
     requests: AsyncIterable<unknown>,
+    options?: CallOptions,
   ): Promise<unknown> {
     this.#ensureNotDisposed();
 
     const invoker = await this.#getInvoker();
-    return invoker.clientStream(path, requests);
+    return invoker.clientStream(path, requests, {
+      ...options,
+      signal: this.#mergeSignals(options?.signal),
+    });
   }
 
   /**
@@ -618,6 +662,7 @@ export class ServerReflectionClient implements AsyncDisposable {
    *
    * @param path - Full method path
    * @param requests - Async iterable of request data objects
+   * @param options - Optional call options including signal for cancellation
    * @returns Async iterable of response objects
    * @throws {ReflectionError} If the method is not found or the request fails
    *
@@ -633,24 +678,39 @@ export class ServerReflectionClient implements AsyncDisposable {
    * )) {
    *   console.log(response);
    * }
+   *
+   * // With cancellation
+   * const controller = new AbortController();
+   * for await (const response of client.bidiStream(
+   *   "grpc.echo.EchoService/SayBidi",
+   *   generateRequests(),
+   *   { signal: controller.signal },
+   * )) {
+   *   console.log(response);
+   * }
    * ```
    */
   bidiStream(
     path: string,
     requests: AsyncIterable<unknown>,
+    options?: CallOptions,
   ): AsyncIterable<unknown> {
     // We need to return an async iterable immediately, so we wrap with an async generator
-    return this.#createBidiStream(path, requests);
+    return this.#createBidiStream(path, requests, options);
   }
 
   async *#createBidiStream(
     path: string,
     requests: AsyncIterable<unknown>,
+    options?: CallOptions,
   ): AsyncIterable<unknown> {
     this.#ensureNotDisposed();
 
     const invoker = await this.#getInvoker();
-    yield* invoker.bidiStream(path, requests);
+    yield* invoker.bidiStream(path, requests, {
+      ...options,
+      signal: this.#mergeSignals(options?.signal),
+    });
   }
 
   /**
@@ -671,16 +731,25 @@ export class ServerReflectionClient implements AsyncDisposable {
    * for await (const msg of echo.sayServerStream({ sentence: "Hello" })) {
    *   console.log(msg);
    * }
+   *
+   * // With cancellation
+   * const controller = new AbortController();
+   * const response = await echo.say({ sentence: "Hello" }, { signal: controller.signal });
    * ```
    */
   service(serviceName: string): DynamicServiceProxy {
+    this.#ensureNotDisposed();
+
     // Bind methods for use in proxy handler
     const callMethod = this.call.bind(this);
     const bidiStreamMethod = this.bidiStream.bind(this);
 
     return new Proxy({} as DynamicServiceProxy, {
       get(_target, methodName: string) {
-        return (requestOrRequests: unknown | AsyncIterable<unknown>) => {
+        return (
+          requestOrRequests: unknown | AsyncIterable<unknown>,
+          options?: CallOptions,
+        ) => {
           const path = `${serviceName}/${methodName}`;
 
           // Detect if input is an async iterable (for streaming methods)
@@ -694,10 +763,11 @@ export class ServerReflectionClient implements AsyncDisposable {
             return bidiStreamMethod(
               path,
               requestOrRequests as AsyncIterable<unknown>,
+              options,
             );
           } else {
             // For single input, use call (unary or server streaming handled by invoker)
-            return callMethod(path, requestOrRequests);
+            return callMethod(path, requestOrRequests, options);
           }
         };
       },

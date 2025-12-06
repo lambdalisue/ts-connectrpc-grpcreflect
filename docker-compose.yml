@@ -1,0 +1,5 @@
+services:
+  echo-connectrpc:
+    image: ghcr.io/jsr-probitas/echo-connectrpc:latest
+    ports:
+      - "8080:8080"

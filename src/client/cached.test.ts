@@ -202,4 +202,76 @@ describe("CachedServerReflectionClient", () => {
       expect(stats2.misses).toBe(0);
     });
   });
+
+  describe("disposal", () => {
+    it("should clear caches on disposal", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+      const disposableClient = new CachedServerReflectionClient(transport);
+
+      // Populate cache
+      await disposableClient.getFileByFilename("v1/reflection.proto");
+      await disposableClient.listServices();
+
+      const statsBefore = disposableClient.getCacheStats();
+      expect(statsBefore.misses).toBe(2);
+      expect(statsBefore.fileEntries).toBeGreaterThan(0);
+
+      // Dispose the client
+      await disposableClient.close();
+
+      // Verify disposed state
+      expect(disposableClient.disposed).toBe(true);
+
+      // Verify caches are cleared
+      const statsAfter = disposableClient.getCacheStats();
+      expect(statsAfter.fileEntries).toBe(0);
+      expect(statsAfter.serviceEntries).toBe(0);
+    });
+
+    it("should work with await using syntax and clear caches", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+
+      let clientRef: CachedServerReflectionClient | undefined;
+
+      {
+        await using disposableClient = new CachedServerReflectionClient(
+          transport,
+        );
+        clientRef = disposableClient;
+
+        // Populate cache
+        await disposableClient.listServices();
+        await disposableClient.getFileByFilename("v1/reflection.proto");
+
+        expect(disposableClient.disposed).toBe(false);
+        expect(disposableClient.getCacheStats().fileEntries).toBeGreaterThan(0);
+      }
+
+      // After the block, client should be disposed and caches cleared
+      expect(clientRef!.disposed).toBe(true);
+      expect(clientRef!.getCacheStats().fileEntries).toBe(0);
+    });
+  });
 });

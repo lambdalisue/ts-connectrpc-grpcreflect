@@ -1,4 +1,4 @@
-import type { Transport } from "@connectrpc/connect";
+import type { CallOptions, Transport } from "@connectrpc/connect";
 import type { DynamicServiceProxy } from "./proxy.js";
 import { Code, createClient } from "@connectrpc/connect";
 import {
@@ -32,12 +32,34 @@ export { ServerReflection } from "../_gen/v1/reflection_pb.js";
 /**
  * Client for gRPC Server Reflection Protocol (v1).
  * Allows dynamic discovery of services and their definitions at runtime.
+ *
+ * This client implements AsyncDisposable for proper resource cleanup.
+ * Use `await using` or call `close()` to release HTTP/2 connections.
+ *
+ * @example
+ * ```typescript
+ * // Using await using (recommended)
+ * {
+ *   await using client = new ServerReflectionClient(transport);
+ *   const services = await client.listServices();
+ * } // Automatically disposed
+ *
+ * // Using close() explicitly
+ * const client = new ServerReflectionClient(transport);
+ * try {
+ *   const services = await client.listServices();
+ * } finally {
+ *   await client.close();
+ * }
+ * ```
  */
-export class ServerReflectionClient {
+export class ServerReflectionClient implements AsyncDisposable {
   readonly #transport: Transport;
+  readonly #abortController: AbortController;
   #client: ReturnType<typeof createClient<typeof ServerReflection>>;
   #invoker?: MethodInvoker;
   #registry?: FileRegistry;
+  #disposed = false;
 
   /**
    * Creates a new ServerReflectionClient.
@@ -50,7 +72,47 @@ export class ServerReflectionClient {
     service: typeof ServerReflection = ServerReflection,
   ) {
     this.#transport = transport;
+    this.#abortController = new AbortController();
     this.#client = createClient(service, transport);
+  }
+
+  /**
+   * Returns whether this client has been disposed.
+   */
+  get disposed(): boolean {
+    return this.#disposed;
+  }
+
+  /**
+   * Disposes of this client, cancelling any pending requests.
+   * Implements the AsyncDisposable interface for use with `await using`.
+   */
+  async [Symbol.asyncDispose](): Promise<void> {
+    if (this.#disposed) return;
+    this.#disposed = true;
+
+    // Abort any in-flight requests to release HTTP/2 connections
+    this.#abortController.abort();
+  }
+
+  /**
+   * Closes this client, releasing resources.
+   * Alias for [Symbol.asyncDispose]() for explicit cleanup.
+   */
+  async close(): Promise<void> {
+    await this[Symbol.asyncDispose]();
+  }
+
+  /**
+   * Throws an error if this client has been disposed.
+   */
+  #ensureNotDisposed(): void {
+    if (this.#disposed) {
+      throw new ReflectionError(
+        Code.Aborted,
+        "ServerReflectionClient is disposed",
+      );
+    }
   }
 
   /**
@@ -70,10 +132,13 @@ export class ServerReflectionClient {
   /**
    * Lists all services available on the server.
    *
+   * @param options - Optional call options including signal for cancellation
    * @returns Array of fully-qualified service names
-   * @throws {ReflectionError} If the request fails
+   * @throws {ReflectionError} If the request fails or client is disposed
    */
-  async listServices(): Promise<string[]> {
+  async listServices(options?: CallOptions): Promise<string[]> {
+    this.#ensureNotDisposed();
+
     const request = create(ServerReflectionRequestSchema, {
       messageRequest: {
         case: "listServices",
@@ -81,7 +146,7 @@ export class ServerReflectionClient {
       },
     });
 
-    const response = await this.#sendRequest(request);
+    const response = await this.#sendRequest(request, options);
 
     if (response.messageResponse.case === "listServicesResponse") {
       return response.messageResponse.value.service.map((s) => s.name);
@@ -99,10 +164,16 @@ export class ServerReflectionClient {
    * Retrieves the file descriptor for a file by its name.
    *
    * @param filename - The proto file name (e.g., "myservice.proto")
+   * @param options - Optional call options including signal for cancellation
    * @returns The file descriptor proto
-   * @throws {ReflectionError} If the file is not found or request fails
+   * @throws {ReflectionError} If the file is not found or request fails or client is disposed
    */
-  async getFileByFilename(filename: string): Promise<FileDescriptorProto> {
+  async getFileByFilename(
+    filename: string,
+    options?: CallOptions,
+  ): Promise<FileDescriptorProto> {
+    this.#ensureNotDisposed();
+
     const request = create(ServerReflectionRequestSchema, {
       messageRequest: {
         case: "fileByFilename",
@@ -110,7 +181,7 @@ export class ServerReflectionClient {
       },
     });
 
-    const response = await this.#sendRequest(request);
+    const response = await this.#sendRequest(request, options);
 
     if (response.messageResponse.case === "fileDescriptorResponse") {
       const descriptorData =
@@ -140,10 +211,16 @@ export class ServerReflectionClient {
    * Retrieves the file descriptor for a file containing the specified symbol.
    *
    * @param symbol - Fully-qualified symbol name (e.g., "mypackage.MyService")
+   * @param options - Optional call options including signal for cancellation
    * @returns The file descriptor proto
-   * @throws {ReflectionError} If the symbol is not found or request fails
+   * @throws {ReflectionError} If the symbol is not found or request fails or client is disposed
    */
-  async getFileContainingSymbol(symbol: string): Promise<FileDescriptorProto> {
+  async getFileContainingSymbol(
+    symbol: string,
+    options?: CallOptions,
+  ): Promise<FileDescriptorProto> {
+    this.#ensureNotDisposed();
+
     const request = create(ServerReflectionRequestSchema, {
       messageRequest: {
         case: "fileContainingSymbol",
@@ -151,7 +228,7 @@ export class ServerReflectionClient {
       },
     });
 
-    const response = await this.#sendRequest(request);
+    const response = await this.#sendRequest(request, options);
 
     if (response.messageResponse.case === "fileDescriptorResponse") {
       const descriptorData =
@@ -182,13 +259,17 @@ export class ServerReflectionClient {
    *
    * @param containingType - Fully-qualified name of the message type being extended
    * @param extensionNumber - The extension field number
+   * @param options - Optional call options including signal for cancellation
    * @returns The file descriptor proto
-   * @throws {ReflectionError} If the extension is not found or request fails
+   * @throws {ReflectionError} If the extension is not found or request fails or client is disposed
    */
   async getFileContainingExtension(
     containingType: string,
     extensionNumber: number,
+    options?: CallOptions,
   ): Promise<FileDescriptorProto> {
+    this.#ensureNotDisposed();
+
     const request = create(ServerReflectionRequestSchema, {
       messageRequest: {
         case: "fileContainingExtension",
@@ -199,7 +280,7 @@ export class ServerReflectionClient {
       },
     });
 
-    const response = await this.#sendRequest(request);
+    const response = await this.#sendRequest(request, options);
 
     if (response.messageResponse.case === "fileDescriptorResponse") {
       const descriptorData =
@@ -232,10 +313,16 @@ export class ServerReflectionClient {
    * Retrieves all extension numbers for a given message type.
    *
    * @param type - Fully-qualified message type name
+   * @param options - Optional call options including signal for cancellation
    * @returns Array of extension field numbers
-   * @throws {ReflectionError} If the request fails
+   * @throws {ReflectionError} If the request fails or client is disposed
    */
-  async getAllExtensionNumbersOfType(type: string): Promise<number[]> {
+  async getAllExtensionNumbersOfType(
+    type: string,
+    options?: CallOptions,
+  ): Promise<number[]> {
+    this.#ensureNotDisposed();
+
     const request = create(ServerReflectionRequestSchema, {
       messageRequest: {
         case: "allExtensionNumbersOfType",
@@ -243,7 +330,7 @@ export class ServerReflectionClient {
       },
     });
 
-    const response = await this.#sendRequest(request);
+    const response = await this.#sendRequest(request, options);
 
     if (response.messageResponse.case === "allExtensionNumbersResponse") {
       return response.messageResponse.value.extensionNumber;
@@ -261,11 +348,17 @@ export class ServerReflectionClient {
    * Retrieves the service descriptor for a given service name.
    *
    * @param serviceName - Fully-qualified service name
+   * @param options - Optional call options including signal for cancellation
    * @returns Service descriptor with methods and file information
-   * @throws {ReflectionError} If the service is not found or request fails
+   * @throws {ReflectionError} If the service is not found or request fails or client is disposed
    */
-  async getServiceDescriptor(serviceName: string): Promise<ServiceDescriptor> {
-    const file = await this.getFileContainingSymbol(serviceName);
+  async getServiceDescriptor(
+    serviceName: string,
+    options?: CallOptions,
+  ): Promise<ServiceDescriptor> {
+    this.#ensureNotDisposed();
+
+    const file = await this.getFileContainingSymbol(serviceName, options);
 
     const service = file.service.find((s) => {
       const fullName = file.package ? `${file.package}.${s.name}` : s.name;
@@ -305,14 +398,18 @@ export class ServerReflectionClient {
    *
    * @param serviceName - Fully-qualified service name
    * @param methodName - Simple method name
+   * @param options - Optional call options including signal for cancellation
    * @returns Method descriptor
-   * @throws {ReflectionError} If the method is not found or request fails
+   * @throws {ReflectionError} If the method is not found or request fails or client is disposed
    */
   async getMethodDescriptor(
     serviceName: string,
     methodName: string,
+    options?: CallOptions,
   ): Promise<MethodDescriptor> {
-    const serviceDesc = await this.getServiceDescriptor(serviceName);
+    this.#ensureNotDisposed();
+
+    const serviceDesc = await this.getServiceDescriptor(serviceName, options);
     const method = serviceDesc.methods.find((m) => m.name === methodName);
 
     if (!method) {
@@ -328,11 +425,14 @@ export class ServerReflectionClient {
   /**
    * Builds a complete FileRegistry containing all services.
    *
+   * @param options - Optional call options including signal for cancellation
    * @returns FileRegistry with all discovered services
-   * @throws {ReflectionError} If the request fails
+   * @throws {ReflectionError} If the request fails or client is disposed
    */
-  async buildFileRegistry(): Promise<FileRegistry> {
-    const services = await this.listServices();
+  async buildFileRegistry(options?: CallOptions): Promise<FileRegistry> {
+    this.#ensureNotDisposed();
+
+    const services = await this.listServices(options);
     const fileMap = new Map<string, FileDescriptorProto>();
 
     // Helper to recursively collect file and its dependencies
@@ -341,7 +441,7 @@ export class ServerReflectionClient {
       for (const depName of file.dependency) {
         if (!fileMap.has(depName)) {
           // Dependency not yet collected, fetch it
-          const depFile = await this.getFileByFilename(depName);
+          const depFile = await this.getFileByFilename(depName, options);
           // Recursively collect the dependency's dependencies
           await collectFileDependencies(depFile);
         }
@@ -362,7 +462,7 @@ export class ServerReflectionClient {
         },
       });
 
-      const response = await this.#sendRequest(request);
+      const response = await this.#sendRequest(request, options);
 
       if (response.messageResponse.case === "fileDescriptorResponse") {
         // Process all files returned by the server
@@ -384,23 +484,38 @@ export class ServerReflectionClient {
   }
 
   /**
+   * Merges the user-provided signal with the client's internal abort signal.
+   */
+  #mergeSignals(userSignal?: AbortSignal): AbortSignal {
+    if (!userSignal) {
+      return this.#abortController.signal;
+    }
+    return AbortSignal.any([this.#abortController.signal, userSignal]);
+  }
+
+  /**
    * Sends a reflection request and returns the response.
    * This is a low-level method used internally.
    *
    * @param request - The reflection request
+   * @param options - Optional call options including signal for cancellation
    * @returns The reflection response
-   * @throws {ReflectionError} If the request fails
+   * @throws {ReflectionError} If the request fails or client is disposed
    */
   async #sendRequest(
     request: ServerReflectionRequest,
+    options?: CallOptions,
   ): Promise<ServerReflectionResponse> {
     // For bidirectional streaming, we create an async generator that yields our request
     async function* input() {
       yield request;
     }
 
-    // Call the streaming method with our input
-    const responses = this.#client.serverReflectionInfo(input());
+    // Call the streaming method with our input and pass the merged abort signal
+    const responses = this.#client.serverReflectionInfo(input(), {
+      ...options,
+      signal: this.#mergeSignals(options?.signal),
+    });
 
     // Get the first (and only) response
     for await (const response of responses) {
@@ -420,7 +535,7 @@ export class ServerReflectionClient {
    * @param path - Full method path (e.g., "grpc.echo.EchoService/Say")
    * @param request - Request data as plain object
    * @returns Response as plain object
-   * @throws {ReflectionError} If the method is not found or the request fails
+   * @throws {ReflectionError} If the method is not found or the request fails or client is disposed
    *
    * @example
    * ```typescript
@@ -430,6 +545,8 @@ export class ServerReflectionClient {
    * ```
    */
   async call(path: string, request: unknown): Promise<unknown> {
+    this.#ensureNotDisposed();
+
     const invoker = await this.#getInvoker();
     return invoker.call(path, request);
   }
@@ -460,6 +577,8 @@ export class ServerReflectionClient {
     path: string,
     request: unknown,
   ): AsyncIterable<unknown> {
+    this.#ensureNotDisposed();
+
     const invoker = await this.#getInvoker();
     yield* invoker.serverStream(path, request);
   }
@@ -470,7 +589,7 @@ export class ServerReflectionClient {
    * @param path - Full method path
    * @param requests - Async iterable of request data objects
    * @returns Response as plain object
-   * @throws {ReflectionError} If the method is not found or the request fails
+   * @throws {ReflectionError} If the method is not found or the request fails or client is disposed
    *
    * @example
    * ```typescript
@@ -488,6 +607,8 @@ export class ServerReflectionClient {
     path: string,
     requests: AsyncIterable<unknown>,
   ): Promise<unknown> {
+    this.#ensureNotDisposed();
+
     const invoker = await this.#getInvoker();
     return invoker.clientStream(path, requests);
   }
@@ -526,6 +647,8 @@ export class ServerReflectionClient {
     path: string,
     requests: AsyncIterable<unknown>,
   ): AsyncIterable<unknown> {
+    this.#ensureNotDisposed();
+
     const invoker = await this.#getInvoker();
     yield* invoker.bidiStream(path, requests);
   }

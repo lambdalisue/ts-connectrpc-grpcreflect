@@ -21,6 +21,7 @@ export {
 
 // Re-export protocol versions
 export * as v1 from "./v1.js";
+export * as v1alpha from "./v1alpha.js";
 
 /**
  * Creates a server reflection client with the given transport.

@@ -1,5 +1,5 @@
 /**
- * Dynamically call gRPC methods using the simplified API
+ * Dynamically call gRPC methods using the DynamicDispatchClient and ProxyDispatchClient
  *
  * Start the test server first:
  *   docker compose up -d echo-connectrpc
@@ -7,15 +7,16 @@
  * Then run this example:
  *   npx tsx examples/client-dynamic-call.ts
  *
- * This example demonstrates the simplified dynamic method calling API:
- * - client.call() for unary methods
- * - client.serverStream() for server streaming methods
- * - client.clientStream() for client streaming methods
- * - client.bidiStream() for bidirectional streaming methods
- * - client.service() for Proxy-based method access
+ * This example demonstrates the dynamic method calling API:
+ * - DynamicDispatchClient for explicit service/method name calls
+ * - ProxyDispatchClient for Proxy-based method access
  */
 
-import { ServerReflectionClient } from "../src/client/index.js";
+import {
+  ServerReflectionClient,
+  DynamicDispatchClient,
+  ProxyDispatchClient,
+} from "../src/client/index.js";
 import {
   createGrpcTransport,
   Http2SessionManager,
@@ -35,21 +36,26 @@ const transport = createGrpcTransport({
 });
 
 try {
-  // Create reflection client with automatic disposal
-  await using client = new ServerReflectionClient(transport);
-
-  // List available services
+  // Step 1: Use reflection to discover services and build registry
   console.log("=== List Services ===");
-  const services = await client.listServices();
-  console.log("Available services:");
-  for (const service of services) {
-    console.log(`  - ${service}`);
+  let registry;
+  {
+    await using reflectionClient = new ServerReflectionClient(transport);
+    const services = await reflectionClient.listServices();
+    console.log("Available services:");
+    for (const service of services) {
+      console.log(`  - ${service}`);
+    }
+    registry = await reflectionClient.buildFileRegistry();
   }
+  // Reflection client is now disposed
 
   // ============================================================
-  // Method 1: Using full path with bidiStream()
+  // Method 1: Using DynamicDispatchClient with bidiStream()
   // ============================================================
-  console.log("\n=== Method 1: Using bidiStream() ===");
+  console.log("\n=== Method 1: Using DynamicDispatchClient.bidiStream() ===");
+
+  const client = new DynamicDispatchClient(transport, registry);
 
   async function* listServicesRequest() {
     yield {
@@ -61,7 +67,8 @@ try {
   }
 
   const responses = client.bidiStream(
-    "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+    "grpc.reflection.v1.ServerReflection",
+    "ServerReflectionInfo",
     listServicesRequest(),
   );
 
@@ -74,7 +81,7 @@ try {
     };
 
     if (resp.messageResponse?.case === "listServicesResponse") {
-      console.log("Services from bidiStream:");
+      console.log("Services from DynamicDispatchClient.bidiStream:");
       for (const svc of resp.messageResponse.value?.service ?? []) {
         console.log(`  - ${svc.name}`);
       }
@@ -83,11 +90,15 @@ try {
   }
 
   // ============================================================
-  // Method 2: Using Proxy-based service client
+  // Method 2: Using ProxyDispatchClient
   // ============================================================
-  console.log("\n=== Method 2: Using Proxy-based service() ===");
+  console.log("\n=== Method 2: Using ProxyDispatchClient ===");
 
-  const reflection = client.service("grpc.reflection.v1.ServerReflection");
+  const reflection = new ProxyDispatchClient(
+    transport,
+    registry,
+    "grpc.reflection.v1.ServerReflection",
+  );
 
   async function* proxyRequest() {
     yield {
@@ -110,7 +121,7 @@ try {
     };
 
     if (resp.messageResponse?.case === "listServicesResponse") {
-      console.log("Services from service() proxy:");
+      console.log("Services from ProxyDispatchClient:");
       for (const svc of resp.messageResponse.value?.service ?? []) {
         console.log(`  - ${svc.name}`);
       }

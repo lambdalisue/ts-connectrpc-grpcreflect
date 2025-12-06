@@ -220,63 +220,6 @@ describe("ServerReflectionClient (v1)", () => {
     });
   });
 
-  describe("bidiStream (dynamic invocation)", () => {
-    it("should invoke bidirectional streaming method using full path", async () => {
-      async function* requests() {
-        yield {
-          messageRequest: {
-            case: "listServices",
-            value: "",
-          },
-        };
-      }
-
-      const responses = client.bidiStream(
-        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
-        requests(),
-      );
-
-      const results: unknown[] = [];
-      for await (const response of responses) {
-        results.push(response);
-      }
-
-      expect(results.length).toBeGreaterThan(0);
-      const firstResponse = results[0] as {
-        messageResponse?: {
-          case?: string;
-          value?: { service?: Array<{ name?: string }> };
-        };
-      };
-      expect(firstResponse.messageResponse?.case).toBe("listServicesResponse");
-    });
-  });
-
-  describe("service (Proxy-based client)", () => {
-    it("should return a proxy that allows method calls via property access", async () => {
-      const proxy = client.service("grpc.reflection.v1.ServerReflection");
-
-      async function* requests() {
-        yield {
-          messageRequest: {
-            case: "listServices",
-            value: "",
-          },
-        };
-      }
-
-      // Access method via camelCase name
-      const responses = proxy.serverReflectionInfo(requests());
-
-      const results: unknown[] = [];
-      for await (const response of responses as AsyncIterable<unknown>) {
-        results.push(response);
-      }
-
-      expect(results.length).toBeGreaterThan(0);
-    });
-  });
-
   describe("disposal", () => {
     it("should implement AsyncDisposable interface", async () => {
       // Load test file descriptor data
@@ -342,9 +285,6 @@ describe("ServerReflectionClient (v1)", () => {
       await expect(disposableClient.buildFileRegistry()).rejects.toThrow(
         "disposed",
       );
-      await expect(
-        disposableClient.call("test.Service/Method", {}),
-      ).rejects.toThrow("disposed");
     });
 
     it("should support multiple dispose calls (idempotent)", async () => {
@@ -436,86 +376,6 @@ describe("ServerReflectionClient (v1)", () => {
       await expect(
         client.listServices({ signal: abortController.signal }),
       ).rejects.toThrow();
-    });
-
-    it("should accept signal option in call()", async () => {
-      const abortController = new AbortController();
-
-      async function* requests() {
-        yield {
-          messageRequest: {
-            case: "listServices",
-            value: "",
-          },
-        };
-      }
-
-      // First verify call works without signal
-      const responses = client.bidiStream(
-        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
-        requests(),
-        { signal: abortController.signal },
-      );
-
-      const results: unknown[] = [];
-      for await (const response of responses) {
-        results.push(response);
-        break; // Only need first response
-      }
-      expect(results.length).toBeGreaterThan(0);
-    });
-
-    it("should cancel bidiStream when signal is aborted", async () => {
-      const abortController = new AbortController();
-      // Abort immediately
-      abortController.abort();
-
-      async function* requests() {
-        yield {
-          messageRequest: {
-            case: "listServices",
-            value: "",
-          },
-        };
-      }
-
-      const responses = client.bidiStream(
-        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
-        requests(),
-        { signal: abortController.signal },
-      );
-
-      await expect(async () => {
-        for await (const _response of responses) {
-          // Should not reach here
-        }
-      }).rejects.toThrow();
-    });
-
-    it("should accept signal option in service() proxy", async () => {
-      const abortController = new AbortController();
-
-      const proxy = client.service("grpc.reflection.v1.ServerReflection");
-
-      async function* requests() {
-        yield {
-          messageRequest: {
-            case: "listServices",
-            value: "",
-          },
-        };
-      }
-
-      const responses = proxy.serverReflectionInfo(requests(), {
-        signal: abortController.signal,
-      });
-
-      const results: unknown[] = [];
-      for await (const response of responses as AsyncIterable<unknown>) {
-        results.push(response);
-        break; // Only need first response
-      }
-      expect(results.length).toBeGreaterThan(0);
     });
   });
 });

@@ -200,14 +200,18 @@ describe("Examples Integration Tests", () => {
       // Verify list services works
       expect(result.stdout).toContain("=== List Services ===");
       expect(result.stdout).toContain("Available services:");
-      // Verify bidiStream() method works
-      expect(result.stdout).toContain("=== Method 1: Using bidiStream() ===");
-      expect(result.stdout).toContain("Services from bidiStream:");
-      // Verify service() proxy works
+      // Verify DynamicDispatchClient.bidiStream() method works
       expect(result.stdout).toContain(
-        "=== Method 2: Using Proxy-based service() ===",
+        "=== Method 1: Using DynamicDispatchClient.bidiStream() ===",
       );
-      expect(result.stdout).toContain("Services from service() proxy:");
+      expect(result.stdout).toContain(
+        "Services from DynamicDispatchClient.bidiStream:",
+      );
+      // Verify ProxyDispatchClient works
+      expect(result.stdout).toContain(
+        "=== Method 2: Using ProxyDispatchClient ===",
+      );
+      expect(result.stdout).toContain("Services from ProxyDispatchClient:");
       expect(result.stdout).toContain("=== Done ===");
     }, 30000);
   });

@@ -95,7 +95,7 @@ Use the reflection client to dynamically discover services and their definitions
 **Option 1: Using gRPC Protocol**
 
 ```typescript
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 
 // gRPC transport always uses HTTP/2 (no httpVersion option needed)
@@ -103,19 +103,21 @@ const transport = createGrpcTransport({
   baseUrl: "https://api.example.com",
 });
 
-// Create client
-const client = createServerReflectionClient(transport);
+// Create client with await using for automatic disposal
+{
+  await using client = new ServerReflectionClient(transport);
 
-// List all services
-const services = await client.listServices();
-console.log("Available services:", services);
+  // List all services
+  const services = await client.listServices();
+  console.log("Available services:", services);
 
-// Get service details
-const serviceDesc = await client.getServiceDescriptor("mypackage.MyService");
-console.log(
-  "Methods:",
-  serviceDesc.methods.map((m) => m.name),
-);
+  // Get service details
+  const serviceDesc = await client.getServiceDescriptor("mypackage.MyService");
+  console.log(
+    "Methods:",
+    serviceDesc.methods.map((m) => m.name),
+  );
+} // client is automatically disposed here
 ```
 
 **Option 2: Using Connect Protocol**
@@ -133,9 +135,9 @@ const transport = createConnectTransport({
 ### Exploring Services
 
 ```typescript
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
 
-const client = createServerReflectionClient(transport);
+await using client = new ServerReflectionClient(transport);
 
 // Get all services
 const services = await client.listServices();
@@ -165,9 +167,9 @@ for (const serviceName of services) {
 ### Building FileRegistry
 
 ```typescript
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
 
-const client = createServerReflectionClient(transport);
+await using client = new ServerReflectionClient(transport);
 
 // Build complete registry from all services
 const registry = await client.buildFileRegistry();
@@ -177,12 +179,19 @@ const serviceDesc = registry.getService("mypackage.MyService");
 const messageDesc = registry.getMessage("mypackage.MyRequest");
 ```
 
-### Calling Methods Dynamically (Simplified API)
+### Calling Methods Dynamically
 
-The `ServerReflectionClient` provides a simplified API for calling methods without manually building registries:
+After building a `FileRegistry` from reflection, use `DynamicDispatchClient` or `ProxyDispatchClient` to invoke methods dynamically:
+
+#### Using DynamicDispatchClient
+
+`DynamicDispatchClient` allows method invocation by specifying service and method names as strings:
 
 ```typescript
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import {
+  ServerReflectionClient,
+  DynamicDispatchClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
 import { createConnectTransport } from "@connectrpc/connect-node";
 
 const transport = createConnectTransport({
@@ -190,17 +199,27 @@ const transport = createConnectTransport({
   httpVersion: "2",
 });
 
-const client = createServerReflectionClient(transport);
+// Step 1: Get schema via reflection
+let registry;
+{
+  await using reflectionClient = new ServerReflectionClient(transport);
+  registry = await reflectionClient.buildFileRegistry();
+} // reflectionClient is automatically closed
 
-// Call unary method using full path
-const response = await client.call("mypackage.MyService/Say", {
+// Step 2: Create dynamic dispatch client
+const client = new DynamicDispatchClient(transport, registry);
+
+// Call unary method (supports both PascalCase and lowerCamelCase method names)
+const response = await client.call("mypackage.MyService", "Say", {
   sentence: "Hello, world!",
 });
 
 // Call server streaming method
-for await (const msg of client.serverStream("mypackage.MyService/SayStream", {
-  sentence: "Hello",
-})) {
+for await (const msg of client.serverStream(
+  "mypackage.MyService",
+  "SayStream",
+  { sentence: "Hello" },
+)) {
   console.log(msg);
 }
 
@@ -210,31 +229,47 @@ async function* requests() {
   yield { sentence: "World" };
 }
 const result = await client.clientStream(
-  "mypackage.MyService/SayClientStream",
+  "mypackage.MyService",
+  "SayClientStream",
   requests(),
 );
 console.log(result);
 
 // Call bidirectional streaming method
 for await (const msg of client.bidiStream(
-  "mypackage.MyService/SayBidi",
+  "mypackage.MyService",
+  "SayBidi",
   requests(),
 )) {
   console.log(msg);
 }
 ```
 
-### Using Proxy-based Service Client
+#### Using ProxyDispatchClient
 
-For a more fluent API, use `service()` to get a Proxy-based client:
+`ProxyDispatchClient` provides a more fluent API with method access via property names:
 
 ```typescript
-const client = createServerReflectionClient(transport);
+import {
+  ServerReflectionClient,
+  ProxyDispatchClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
 
-// Get a service proxy
-const echo = client.service("mypackage.MyService");
+// Build registry via reflection
+let registry;
+{
+  await using reflectionClient = new ServerReflectionClient(transport);
+  registry = await reflectionClient.buildFileRegistry();
+}
 
-// Call methods directly by name (camelCase)
+// Create proxy-based client for a specific service
+const echo = new ProxyDispatchClient(
+  transport,
+  registry,
+  "mypackage.MyService",
+);
+
+// Call methods directly by name (lowerCamelCase)
 const response = await echo.say({ sentence: "Hello" });
 
 // Server streaming
@@ -261,7 +296,7 @@ for await (const msg of echo.sayBidi(requests())) {
 For more control, you can manually build the registry and use `createClient`:
 
 ```typescript
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
 import { createClient } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { createConnectTransport } from "@connectrpc/connect-node";
@@ -272,8 +307,11 @@ const transport = createConnectTransport({
 });
 
 // Discover and build registry
-const reflectionClient = createServerReflectionClient(transport);
-const registry = await reflectionClient.buildFileRegistry();
+let registry;
+{
+  await using reflectionClient = new ServerReflectionClient(transport);
+  registry = await reflectionClient.buildFileRegistry();
+}
 
 // Get service descriptor
 const serviceDesc = registry.getService("mypackage.MyService");
@@ -347,29 +385,46 @@ console.log(formatServiceDescriptor(service));
 
 #### Classes
 
-- `ServerReflectionClient` - Main client for v1 protocol
-- `CachedServerReflectionClient` - Client with caching support
+- `ServerReflectionClient` - Reflection-only client for v1 protocol (implements `AsyncDisposable`)
+- `CachedServerReflectionClient` - Client with caching support (implements `AsyncDisposable`)
+- `DynamicDispatchClient` - Dynamic method invocation by service/method name
+- `ProxyDispatchClient` - Proxy-based method invocation via property access
 
-#### Client Methods
+#### ServerReflectionClient Methods
 
 **Reflection Methods:**
 
-- `listServices()` - List all available services
-- `getFileByFilename(filename)` - Get file descriptor by filename
-- `getFileContainingSymbol(symbol)` - Get file containing a symbol
-- `getFileContainingExtension(type, number)` - Get file containing an extension
-- `getAllExtensionNumbersOfType(type)` - Get all extension numbers
-- `getServiceDescriptor(serviceName)` - Get service metadata
-- `getMethodDescriptor(serviceName, methodName)` - Get method metadata
-- `buildFileRegistry()` - Build complete FileRegistry
+- `listServices(options?)` - List all available services
+- `getFileByFilename(filename, options?)` - Get file descriptor by filename
+- `getFileContainingSymbol(symbol, options?)` - Get file containing a symbol
+- `getFileContainingExtension(type, number, options?)` - Get file containing an extension
+- `getAllExtensionNumbersOfType(type, options?)` - Get all extension numbers
+- `getServiceDescriptor(serviceName, options?)` - Get service metadata
+- `getMethodDescriptor(serviceName, methodName, options?)` - Get method metadata
+- `buildFileRegistry(options?)` - Build complete FileRegistry
 
-**Dynamic Method Invocation:**
+**Lifecycle Methods:**
 
-- `call(path, request)` - Call a unary method (e.g., `"package.Service/Method"`)
-- `serverStream(path, request)` - Call a server streaming method
-- `clientStream(path, requests)` - Call a client streaming method
-- `bidiStream(path, requests)` - Call a bidirectional streaming method
-- `service(serviceName)` - Get a Proxy-based service client for fluent method calls
+- `close()` - Close the client and cancel pending requests
+- `[Symbol.asyncDispose]()` - Dispose the client (for `await using`)
+- `disposed` - Returns whether the client has been disposed
+
+#### DynamicDispatchClient Methods
+
+- `call(service, method, request, options?)` - Call a unary method
+- `serverStream(service, method, request, options?)` - Call a server streaming method
+- `clientStream(service, method, requests, options?)` - Call a client streaming method
+- `bidiStream(service, method, requests, options?)` - Call a bidirectional streaming method
+
+#### ProxyDispatchClient
+
+Access methods directly via property names (lowerCamelCase or PascalCase):
+
+```typescript
+const echo = new ProxyDispatchClient(transport, registry, "mypackage.MyService");
+await echo.say({ sentence: "Hello" }); // Unary
+for await (const msg of echo.sayStream({ sentence: "Hello" })) { ... } // Streaming
+```
 
 #### Cache Methods (CachedServerReflectionClient)
 
@@ -378,10 +433,6 @@ console.log(formatServiceDescriptor(service));
 - `clearServiceCache()` - Clear service caches only
 - `getCacheStats()` - Get cache statistics
 - `resetCacheStats()` - Reset statistics
-
-#### Factory Functions
-
-- `createServerReflectionClient(transport)` - Create client from transport
 
 #### Utilities
 
@@ -499,7 +550,11 @@ import { registerServerReflectionFromFile } from "@lambdalisue/connectrpc-grpcre
 import { registerServerReflectionFromFile } from "@lambdalisue/connectrpc-grpcreflect/server";
 
 // Client API
-import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import {
+  ServerReflectionClient,
+  DynamicDispatchClient,
+  ProxyDispatchClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
 
 // Common utilities
 import { getFileByFilename } from "@lambdalisue/connectrpc-grpcreflect/common";

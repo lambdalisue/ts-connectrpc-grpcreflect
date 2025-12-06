@@ -21,16 +21,16 @@ import {
   ExtensionNumberResponseSchema,
   FileDescriptorResponseSchema,
   ErrorResponseSchema,
-} from "./_gen/v1/reflection_pb.js";
+} from "../_gen/v1/reflection_pb.js";
 import {
   getFileByFilename,
   getListServices,
   getFileContainingSymbol,
   getFileContainingExtension,
   getAllExtensionNumbersOfType,
-} from "./registry.js";
+} from "../common/registry.js";
 
-export { ServerReflection } from "./_gen/v1/reflection_pb.js";
+export { ServerReflection } from "../_gen/v1/reflection_pb.js";
 
 /**
  * Implementation of the gRPC Server Reflection service (v1).

@@ -7,23 +7,24 @@ import { create, fromBinary } from "@bufbuild/protobuf";
 import { FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { Code } from "@connectrpc/connect";
 
-import { ServerReflectionImpl } from "./v1.js";
 import {
   ServerReflectionRequestSchema,
   type ServerReflectionRequest,
   type ServerReflectionResponse,
-} from "./_gen/v1/reflection_pb.js";
+} from "../_gen/v1alpha/reflection_pb.js";
+
+import { ServerReflectionImpl } from "./v1alpha.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-describe("ServerReflectionImpl (v1)", () => {
+describe("ServerReflectionImpl (v1alpha)", () => {
   let serverReflection: ServerReflectionImpl;
   let fileDescriptorData: Uint8Array;
 
   beforeEach(() => {
     fileDescriptorData = readFileSync(
-      join(__dirname, "_gen/file_descriptor.binpb"),
+      join(__dirname, "../_gen/file_descriptor.binpb"),
     );
     serverReflection = ServerReflectionImpl.fromUint8Array(fileDescriptorData);
   });
@@ -47,7 +48,7 @@ describe("ServerReflectionImpl (v1)", () => {
     });
 
     it("should create instance from file", () => {
-      const filePath = join(__dirname, "_gen/file_descriptor.binpb");
+      const filePath = join(__dirname, "../_gen/file_descriptor.binpb");
       const instance = ServerReflectionImpl.fromFile(filePath);
       expect(instance).toBeInstanceOf(ServerReflectionImpl);
       expect(instance.registry).toBeDefined();
@@ -76,7 +77,7 @@ describe("ServerReflectionImpl (v1)", () => {
         host: "test.host",
         messageRequest: {
           case: "fileByFilename",
-          value: "v1/reflection.proto",
+          value: "v1alpha/reflection.proto",
         },
       });
 
@@ -124,7 +125,7 @@ describe("ServerReflectionImpl (v1)", () => {
         host: "test.host",
         messageRequest: {
           case: "fileContainingSymbol",
-          value: "grpc.reflection.v1.ServerReflection",
+          value: "grpc.reflection.v1alpha.ServerReflection",
         },
       });
 
@@ -183,7 +184,7 @@ describe("ServerReflectionImpl (v1)", () => {
         expect(services.length).toBeGreaterThan(0);
         expect(
           services.some(
-            (s) => s.name === "grpc.reflection.v1.ServerReflection",
+            (s) => s.name === "grpc.reflection.v1alpha.ServerReflection",
           ),
         ).toBe(true);
       }
@@ -194,7 +195,7 @@ describe("ServerReflectionImpl (v1)", () => {
         host: "test.host",
         messageRequest: {
           case: "allExtensionNumbersOfType",
-          value: "grpc.reflection.v1.ServerReflectionRequest",
+          value: "grpc.reflection.v1alpha.ServerReflectionRequest",
         },
       });
 
@@ -241,7 +242,7 @@ describe("ServerReflectionImpl (v1)", () => {
           host: "test.host",
           messageRequest: {
             case: "fileByFilename",
-            value: "v1/reflection.proto",
+            value: "v1alpha/reflection.proto",
           },
         });
       }

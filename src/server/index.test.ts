@@ -30,7 +30,7 @@ describe("index", () => {
 
     // Load test file descriptor data
     fileDescriptorData = readFileSync(
-      join(__dirname, "_gen/file_descriptor.binpb"),
+      join(__dirname, "../_gen/file_descriptor.binpb"),
     );
   });
 
@@ -111,7 +111,7 @@ describe("index", () => {
 
   describe("registerServerReflectionFromFile", () => {
     it("should register both v1 and v1alpha services from file", () => {
-      const filePath = join(__dirname, "_gen/file_descriptor.binpb");
+      const filePath = join(__dirname, "../_gen/file_descriptor.binpb");
 
       registerServerReflectionFromFile(mockRouter, filePath);
 

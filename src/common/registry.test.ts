@@ -22,7 +22,7 @@ describe("registry", () => {
 
   beforeEach(() => {
     // Load the file descriptor set from the generated binary file
-    const data = readFileSync(join(__dirname, "_gen/file_descriptor.binpb"));
+    const data = readFileSync(join(__dirname, "../_gen/file_descriptor.binpb"));
     const fileDescriptorSet = fromBinary(FileDescriptorSetSchema, data);
     registry = createFileRegistry(fileDescriptorSet);
   });

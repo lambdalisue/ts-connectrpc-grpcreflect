@@ -20,7 +20,22 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./dist/index.js",
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./server": {
+      "import": "./dist/server/index.js",
+      "types": "./dist/server/index.d.ts"
+    },
+    "./client": {
+      "import": "./dist/client/index.js",
+      "types": "./dist/client/index.d.ts"
+    },
+    "./common": {
+      "import": "./dist/common/registry.js",
+      "types": "./dist/common/registry.d.ts"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {

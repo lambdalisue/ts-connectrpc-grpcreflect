@@ -5,7 +5,13 @@ import tseslint from "typescript-eslint";
 
 export default defineConfig([
   // Specify files and directories to ignore
-  globalIgnores(["**/node_modules/**", "**/dist/**", "**/_gen/**", "repos/**", "examples/**"]),
+  globalIgnores([
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/_gen/**",
+    "repos/**",
+    "examples/**",
+  ]),
 
   // Basic configuration
   tseslint.configs.recommended, // TypeScript recommended

@@ -5,11 +5,12 @@
  * by spawning them as subprocesses against a real server.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import * as path from "node:path";
 import * as net from "node:net";
+
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
 
 const TSX_BIN = path.resolve("node_modules/.bin/tsx");
 
@@ -129,85 +130,85 @@ describe("Examples Integration Tests", () => {
   });
 
   describe("examples/client-list-services.ts", () => {
-    it(
-      "should list available services",
-      async () => {
-        const result = await runScript(
-          "examples/client-list-services.ts",
-          [],
-          { PORT: String(testPort) },
-        );
+    it("should list available services", async () => {
+      const result = await runScript("examples/client-list-services.ts", [], {
+        PORT: String(testPort),
+      });
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("Available services:");
-        expect(result.stdout).toContain("grpc.reflection.v1.ServerReflection");
-      },
-      30000,
-    );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Available services:");
+      expect(result.stdout).toContain("grpc.reflection.v1.ServerReflection");
+    }, 30000);
   });
 
   describe("examples/client-inspect-service.ts", () => {
-    it(
-      "should inspect a service and display methods",
-      async () => {
-        const result = await runScript(
-          "examples/client-inspect-service.ts",
-          ["grpc.reflection.v1.ServerReflection"],
-          { PORT: String(testPort) },
-        );
+    it("should inspect a service and display methods", async () => {
+      const result = await runScript(
+        "examples/client-inspect-service.ts",
+        ["grpc.reflection.v1.ServerReflection"],
+        { PORT: String(testPort) },
+      );
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("ServerReflection");
-        expect(result.stdout).toContain("method(s)");
-        expect(result.stdout).toContain("ServerReflectionInfo");
-      },
-      30000,
-    );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("ServerReflection");
+      expect(result.stdout).toContain("method(s)");
+      expect(result.stdout).toContain("ServerReflectionInfo");
+    }, 30000);
   });
 
   describe("examples/client-cached.ts", () => {
-    it(
-      "should demonstrate caching with hit/miss stats",
-      async () => {
-        const result = await runScript(
-          "examples/client-cached.ts",
-          [],
-          { PORT: String(testPort) },
-        );
+    it("should demonstrate caching with hit/miss stats", async () => {
+      const result = await runScript("examples/client-cached.ts", [], {
+        PORT: String(testPort),
+      });
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("Fetching services (first call)");
-        expect(result.stdout).toContain("Fetching services (second call)");
-        expect(result.stdout).toContain("hits");
-        expect(result.stdout).toContain("misses");
-        expect(result.stdout).toContain("Cache cleared!");
-      },
-      30000,
-    );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Fetching services (first call)");
+      expect(result.stdout).toContain("Fetching services (second call)");
+      expect(result.stdout).toContain("hits");
+      expect(result.stdout).toContain("misses");
+      expect(result.stdout).toContain("Cache cleared!");
+    }, 30000);
   });
 
   describe("examples/client-call-method.ts", () => {
-    it(
-      "should dynamically call a method",
-      async () => {
-        const result = await runScript(
-          "examples/client-call-method.ts",
-          [],
-          { PORT: String(testPort) },
-        );
+    it("should dynamically call a method", async () => {
+      const result = await runScript("examples/client-call-method.ts", [], {
+        PORT: String(testPort),
+      });
 
-        expect(result.exitCode).toBe(0);
-        expect(result.stdout).toContain("Discovering services...");
-        expect(result.stdout).toContain("Building file registry...");
-        expect(result.stdout).toContain("grpc.reflection.v1.ServerReflection");
-        expect(result.stdout).toContain("Method info:");
-        expect(result.stdout).toContain("Request message fields:");
-        // Verify the method was actually called
-        expect(result.stdout).toContain("Calling method dynamically");
-        expect(result.stdout).toContain("Services from dynamic call:");
-        expect(result.stdout).toContain("Dynamic method call complete");
-      },
-      30000,
-    );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("Discovering services...");
+      expect(result.stdout).toContain("Building file registry...");
+      expect(result.stdout).toContain("grpc.reflection.v1.ServerReflection");
+      expect(result.stdout).toContain("Method info:");
+      expect(result.stdout).toContain("Request message fields:");
+      // Verify the method was actually called
+      expect(result.stdout).toContain("Calling method dynamically");
+      expect(result.stdout).toContain("Services from dynamic call:");
+      expect(result.stdout).toContain("Dynamic method call complete");
+    }, 30000);
+  });
+
+  describe("examples/client-dynamic-call.ts", () => {
+    it("should call methods using simplified dynamic API", async () => {
+      const result = await runScript("examples/client-dynamic-call.ts", [], {
+        PORT: String(testPort),
+      });
+
+      expect(result.exitCode).toBe(0);
+      // Verify list services works
+      expect(result.stdout).toContain("=== List Services ===");
+      expect(result.stdout).toContain("Available services:");
+      // Verify bidiStream() method works
+      expect(result.stdout).toContain("=== Method 1: Using bidiStream() ===");
+      expect(result.stdout).toContain("Services from bidiStream:");
+      // Verify service() proxy works
+      expect(result.stdout).toContain(
+        "=== Method 2: Using Proxy-based service() ===",
+      );
+      expect(result.stdout).toContain("Services from service() proxy:");
+      expect(result.stdout).toContain("=== Done ===");
+    }, 30000);
   });
 });

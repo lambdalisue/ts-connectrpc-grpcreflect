@@ -49,9 +49,10 @@ PORT=8090 npx tsx examples/client-cached.ts
 
 ### `client-call-method.ts`
 
-Dynamically call gRPC methods using reflection without generated code.
+Dynamically call gRPC methods using reflection without generated code (manual approach).
 
-This example demonstrates:
+This example demonstrates the step-by-step process:
+
 1. Discovering services using reflection
 2. Building a FileRegistry with all type information
 3. Creating a dynamic client using service descriptors
@@ -62,38 +63,48 @@ This example demonstrates:
 PORT=8090 npx tsx examples/client-call-method.ts
 ```
 
+### `client-dynamic-call.ts`
+
+**Recommended approach** - Call methods using the simplified dynamic API.
+
+This example demonstrates:
+
+1. Using `client.bidiStream()` for bidirectional streaming with full path
+2. Using `client.service()` to get a Proxy-based service client
+3. Calling methods directly by name (camelCase)
+
+```bash
+PORT=8090 npx tsx examples/client-dynamic-call.ts
+```
+
 Example output:
+
 ```
-Discovering services...
-Found 2 services
+=== List Services ===
+Available services:
+  - grpc.reflection.v1.ServerReflection
+  - grpc.reflection.v1alpha.ServerReflection
 
-Building file registry...
+=== Method 1: Using bidiStream() ===
+Services from bidiStream:
+  - grpc.reflection.v1.ServerReflection
+  - grpc.reflection.v1alpha.ServerReflection
 
-Using service: grpc.reflection.v1.ServerReflection
+=== Method 2: Using Proxy-based service() ===
+Services from service() proxy:
+  - grpc.reflection.v1.ServerReflection
+  - grpc.reflection.v1alpha.ServerReflection
 
-Method info: ServerReflectionInfo
-  Input type: grpc.reflection.v1.ServerReflectionRequest
-  Output type: grpc.reflection.v1.ServerReflectionResponse
-  Streaming: client=true, server=true
-
-Request message fields:
-  - host (scalar)
-  - file_by_filename (scalar)
-  - file_containing_symbol (scalar)
-  - file_containing_extension (message)
-  - all_extension_numbers_of_type (scalar)
-  - list_services (scalar)
-
---- Calling method dynamically ---
-Sending request: { messageRequest: { case: "listServices", value: "" } }
-
-Response:
-  Services from dynamic call:
-    - grpc.reflection.v1.ServerReflection
-    - grpc.reflection.v1alpha.ServerReflection
-
---- Dynamic method call complete ---
+=== Done ===
 ```
+
+**Key methods:**
+
+- `client.call(path, request)` - Unary calls
+- `client.serverStream(path, request)` - Server streaming
+- `client.clientStream(path, requests)` - Client streaming
+- `client.bidiStream(path, requests)` - Bidirectional streaming
+- `client.service(name)` - Get Proxy-based service client
 
 ## Running Examples
 
@@ -110,6 +121,7 @@ PORT=8090 npx tsx examples/client-list-services.ts
 PORT=8090 npx tsx examples/client-inspect-service.ts grpc.reflection.v1.ServerReflection
 PORT=8090 npx tsx examples/client-cached.ts
 PORT=8090 npx tsx examples/client-call-method.ts
+PORT=8090 npx tsx examples/client-dynamic-call.ts  # Recommended
 ```
 
 ### Using Docker Compose
@@ -125,6 +137,7 @@ npx tsx examples/client-list-services.ts
 npx tsx examples/client-inspect-service.ts echo.v1.Echo
 npx tsx examples/client-cached.ts
 npx tsx examples/client-call-method.ts
+npx tsx examples/client-dynamic-call.ts  # Recommended
 
 # Stop the server when done
 docker compose down
@@ -135,6 +148,7 @@ docker compose down
 To run these examples against your own server:
 
 1. Install dependencies:
+
 ```bash
 pnpm install
 ```
@@ -142,6 +156,7 @@ pnpm install
 2. Ensure you have a gRPC server with reflection enabled running
 
 3. Run an example with the `PORT` environment variable:
+
 ```bash
 PORT=50051 npx tsx examples/client-list-services.ts
 ```

@@ -160,7 +160,9 @@ describe("utils", () => {
       };
 
       const result = formatMethodDescriptor(method);
-      expect(result).toContain("example.v1.UserService.ListUsers (server stream)");
+      expect(result).toContain(
+        "example.v1.UserService.ListUsers (server stream)",
+      );
     });
 
     it("should format bidirectional streaming method", () => {

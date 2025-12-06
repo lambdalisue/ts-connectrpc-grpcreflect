@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { Code, createRouterTransport  } from "@connectrpc/connect";
+import { Code, createRouterTransport } from "@connectrpc/connect";
 
 import { registerServerReflectionFromUint8Array } from "../server/index.js";
 
@@ -194,11 +194,15 @@ describe("ServerReflectionClient (v1)", () => {
 
       // The test file descriptor we're using has dependencies
       // Verify we can access nested types across file boundaries
-      const service = registry.getService("grpc.reflection.v1.ServerReflection");
+      const service = registry.getService(
+        "grpc.reflection.v1.ServerReflection",
+      );
       expect(service).toBeDefined();
 
       // Verify we can access messages that might be in dependency files
-      const requestMsg = registry.getMessage("grpc.reflection.v1.ServerReflectionRequest");
+      const requestMsg = registry.getMessage(
+        "grpc.reflection.v1.ServerReflectionRequest",
+      );
       expect(requestMsg).toBeDefined();
       expect(requestMsg?.fields.length).toBeGreaterThan(0);
     });
@@ -213,6 +217,63 @@ describe("ServerReflectionClient (v1)", () => {
       expect(extensions).toBeInstanceOf(Array);
       // The test proto doesn't have extensions, so should be empty
       expect(extensions.length).toBe(0);
+    });
+  });
+
+  describe("bidiStream (dynamic invocation)", () => {
+    it("should invoke bidirectional streaming method using full path", async () => {
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      const responses = client.bidiStream(
+        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+        requests(),
+      );
+
+      const results: unknown[] = [];
+      for await (const response of responses) {
+        results.push(response);
+      }
+
+      expect(results.length).toBeGreaterThan(0);
+      const firstResponse = results[0] as {
+        messageResponse?: {
+          case?: string;
+          value?: { service?: Array<{ name?: string }> };
+        };
+      };
+      expect(firstResponse.messageResponse?.case).toBe("listServicesResponse");
+    });
+  });
+
+  describe("service (Proxy-based client)", () => {
+    it("should return a proxy that allows method calls via property access", async () => {
+      const proxy = client.service("grpc.reflection.v1.ServerReflection");
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      // Access method via camelCase name
+      const responses = proxy.serverReflectionInfo(requests());
+
+      const results: unknown[] = [];
+      for await (const response of responses as AsyncIterable<unknown>) {
+        results.push(response);
+      }
+
+      expect(results.length).toBeGreaterThan(0);
     });
   });
 });

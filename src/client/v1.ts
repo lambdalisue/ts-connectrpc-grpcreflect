@@ -1,6 +1,12 @@
 import type { Transport } from "@connectrpc/connect";
+import type { DynamicServiceProxy } from "./proxy.js";
 import { Code, createClient } from "@connectrpc/connect";
-import { create, createFileRegistry, fromBinary, type FileRegistry } from "@bufbuild/protobuf";
+import {
+  create,
+  createFileRegistry,
+  fromBinary,
+  type FileRegistry,
+} from "@bufbuild/protobuf";
 import {
   FileDescriptorSetSchema,
   FileDescriptorProtoSchema,
@@ -19,6 +25,7 @@ import {
   type ServiceDescriptor,
   type MethodDescriptor,
 } from "./types.js";
+import { MethodInvoker } from "./invoker.js";
 
 export { ServerReflection } from "../_gen/v1/reflection_pb.js";
 
@@ -27,7 +34,10 @@ export { ServerReflection } from "../_gen/v1/reflection_pb.js";
  * Allows dynamic discovery of services and their definitions at runtime.
  */
 export class ServerReflectionClient {
+  readonly #transport: Transport;
   #client: ReturnType<typeof createClient<typeof ServerReflection>>;
+  #invoker?: MethodInvoker;
+  #registry?: FileRegistry;
 
   /**
    * Creates a new ServerReflectionClient.
@@ -39,7 +49,22 @@ export class ServerReflectionClient {
     transport: Transport,
     service: typeof ServerReflection = ServerReflection,
   ) {
+    this.#transport = transport;
     this.#client = createClient(service, transport);
+  }
+
+  /**
+   * Gets or creates the MethodInvoker for dynamic method calls.
+   * Lazily initializes the invoker and caches the FileRegistry.
+   */
+  async #getInvoker(): Promise<MethodInvoker> {
+    if (!this.#invoker) {
+      if (!this.#registry) {
+        this.#registry = await this.buildFileRegistry();
+      }
+      this.#invoker = new MethodInvoker(this.#transport, this.#registry);
+    }
+    return this.#invoker;
   }
 
   /**
@@ -132,10 +157,7 @@ export class ServerReflectionClient {
       const descriptorData =
         response.messageResponse.value.fileDescriptorProto[0];
       if (!descriptorData) {
-        throw new ReflectionError(
-          Code.NotFound,
-          `Symbol not found: ${symbol}`,
-        );
+        throw new ReflectionError(Code.NotFound, `Symbol not found: ${symbol}`);
       }
 
       const fileDescriptorSet = create(FileDescriptorSetSchema, {
@@ -242,9 +264,7 @@ export class ServerReflectionClient {
    * @returns Service descriptor with methods and file information
    * @throws {ReflectionError} If the service is not found or request fails
    */
-  async getServiceDescriptor(
-    serviceName: string,
-  ): Promise<ServiceDescriptor> {
+  async getServiceDescriptor(serviceName: string): Promise<ServiceDescriptor> {
     const file = await this.getFileContainingSymbol(serviceName);
 
     const service = file.service.find((s) => {
@@ -388,5 +408,176 @@ export class ServerReflectionClient {
     }
 
     throw new ReflectionError(Code.Internal, "No response received");
+  }
+
+  // ============================================================
+  // Dynamic Method Invocation API
+  // ============================================================
+
+  /**
+   * Invokes a unary method dynamically.
+   *
+   * @param path - Full method path (e.g., "grpc.echo.EchoService/Say")
+   * @param request - Request data as plain object
+   * @returns Response as plain object
+   * @throws {ReflectionError} If the method is not found or the request fails
+   *
+   * @example
+   * ```typescript
+   * const response = await client.call("grpc.echo.EchoService/Say", {
+   *   sentence: "Hello, world!",
+   * });
+   * ```
+   */
+  async call(path: string, request: unknown): Promise<unknown> {
+    const invoker = await this.#getInvoker();
+    return invoker.call(path, request);
+  }
+
+  /**
+   * Invokes a server streaming method dynamically.
+   *
+   * @param path - Full method path
+   * @param request - Request data as plain object
+   * @returns Async iterable of response objects
+   * @throws {ReflectionError} If the method is not found or the request fails
+   *
+   * @example
+   * ```typescript
+   * for await (const response of client.serverStream("grpc.echo.EchoService/SayStream", {
+   *   sentence: "Hello",
+   * })) {
+   *   console.log(response);
+   * }
+   * ```
+   */
+  serverStream(path: string, request: unknown): AsyncIterable<unknown> {
+    // We need to return an async iterable immediately, so we wrap with an async generator
+    return this.#createServerStream(path, request);
+  }
+
+  async *#createServerStream(
+    path: string,
+    request: unknown,
+  ): AsyncIterable<unknown> {
+    const invoker = await this.#getInvoker();
+    yield* invoker.serverStream(path, request);
+  }
+
+  /**
+   * Invokes a client streaming method dynamically.
+   *
+   * @param path - Full method path
+   * @param requests - Async iterable of request data objects
+   * @returns Response as plain object
+   * @throws {ReflectionError} If the method is not found or the request fails
+   *
+   * @example
+   * ```typescript
+   * async function* generateRequests() {
+   *   yield { sentence: "Hello" };
+   *   yield { sentence: "World" };
+   * }
+   * const response = await client.clientStream(
+   *   "grpc.echo.EchoService/SayClientStream",
+   *   generateRequests(),
+   * );
+   * ```
+   */
+  async clientStream(
+    path: string,
+    requests: AsyncIterable<unknown>,
+  ): Promise<unknown> {
+    const invoker = await this.#getInvoker();
+    return invoker.clientStream(path, requests);
+  }
+
+  /**
+   * Invokes a bidirectional streaming method dynamically.
+   *
+   * @param path - Full method path
+   * @param requests - Async iterable of request data objects
+   * @returns Async iterable of response objects
+   * @throws {ReflectionError} If the method is not found or the request fails
+   *
+   * @example
+   * ```typescript
+   * async function* generateRequests() {
+   *   yield { sentence: "Hello" };
+   *   yield { sentence: "World" };
+   * }
+   * for await (const response of client.bidiStream(
+   *   "grpc.echo.EchoService/SayBidi",
+   *   generateRequests(),
+   * )) {
+   *   console.log(response);
+   * }
+   * ```
+   */
+  bidiStream(
+    path: string,
+    requests: AsyncIterable<unknown>,
+  ): AsyncIterable<unknown> {
+    // We need to return an async iterable immediately, so we wrap with an async generator
+    return this.#createBidiStream(path, requests);
+  }
+
+  async *#createBidiStream(
+    path: string,
+    requests: AsyncIterable<unknown>,
+  ): AsyncIterable<unknown> {
+    const invoker = await this.#getInvoker();
+    yield* invoker.bidiStream(path, requests);
+  }
+
+  /**
+   * Returns a Proxy-based service client for the specified service.
+   * Allows calling methods directly by name.
+   *
+   * @param serviceName - Fully-qualified service name
+   * @returns A proxy object that allows calling methods by name
+   *
+   * @example
+   * ```typescript
+   * const echo = client.service("grpc.echo.EchoService");
+   *
+   * // Call unary method
+   * const response = await echo.say({ sentence: "Hello" });
+   *
+   * // Call streaming method
+   * for await (const msg of echo.sayServerStream({ sentence: "Hello" })) {
+   *   console.log(msg);
+   * }
+   * ```
+   */
+  service(serviceName: string): DynamicServiceProxy {
+    // Bind methods for use in proxy handler
+    const callMethod = this.call.bind(this);
+    const bidiStreamMethod = this.bidiStream.bind(this);
+
+    return new Proxy({} as DynamicServiceProxy, {
+      get(_target, methodName: string) {
+        return (requestOrRequests: unknown | AsyncIterable<unknown>) => {
+          const path = `${serviceName}/${methodName}`;
+
+          // Detect if input is an async iterable (for streaming methods)
+          const isAsyncIterable =
+            requestOrRequests != null &&
+            typeof requestOrRequests === "object" &&
+            Symbol.asyncIterator in requestOrRequests;
+
+          if (isAsyncIterable) {
+            // For streaming input, use bidiStream
+            return bidiStreamMethod(
+              path,
+              requestOrRequests as AsyncIterable<unknown>,
+            );
+          } else {
+            // For single input, use call (unary or server streaming handled by invoker)
+            return callMethod(path, requestOrRequests);
+          }
+        };
+      },
+    });
   }
 }

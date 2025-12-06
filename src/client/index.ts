@@ -16,6 +16,9 @@ export type {
 } from "./types.js";
 export { ReflectionError } from "./types.js";
 
+// Re-export dynamic invocation types
+export type { DynamicServiceProxy } from "./proxy.js";
+
 // Re-export utilities
 export {
   formatServiceList,

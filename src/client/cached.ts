@@ -143,8 +143,7 @@ export class CachedServerReflectionClient extends ServerReflectionClient {
     return {
       hits: this.#stats.hits,
       misses: this.#stats.misses,
-      fileEntries:
-        this.#fileByNameCache.size + this.#fileBySymbolCache.size,
+      fileEntries: this.#fileByNameCache.size + this.#fileBySymbolCache.size,
       serviceEntries: this.#serviceCache.size,
     };
   }

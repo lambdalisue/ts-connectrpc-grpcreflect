@@ -9,6 +9,7 @@ Provides both **server** and **client** implementations for dynamic service disc
 ## Overview
 
 This library enables:
+
 - **Server**: Expose service definitions at runtime for tools like `grpcurl` and `grpc_cli`
 - **Client**: Dynamically discover and inspect gRPC services without .proto files
 
@@ -110,10 +111,11 @@ const services = await client.listServices();
 console.log("Available services:", services);
 
 // Get service details
-const serviceDesc = await client.getServiceDescriptor(
-  "mypackage.MyService"
+const serviceDesc = await client.getServiceDescriptor("mypackage.MyService");
+console.log(
+  "Methods:",
+  serviceDesc.methods.map((m) => m.name),
 );
-console.log("Methods:", serviceDesc.methods.map(m => m.name));
 ```
 
 **Option 2: Using Connect Protocol**
@@ -145,9 +147,13 @@ for (const serviceName of services) {
 
   for (const method of service.methods) {
     const type =
-      method.clientStreaming && method.serverStreaming ? "bidi stream" :
-      method.clientStreaming ? "client stream" :
-      method.serverStreaming ? "server stream" : "unary";
+      method.clientStreaming && method.serverStreaming
+        ? "bidi stream"
+        : method.clientStreaming
+          ? "client stream"
+          : method.serverStreaming
+            ? "server stream"
+            : "unary";
 
     console.log(`  ${method.name} (${type})`);
     console.log(`    → ${method.inputType}`);
@@ -171,7 +177,88 @@ const serviceDesc = registry.getService("mypackage.MyService");
 const messageDesc = registry.getMessage("mypackage.MyRequest");
 ```
 
-### Calling Methods Dynamically
+### Calling Methods Dynamically (Simplified API)
+
+The `ServerReflectionClient` provides a simplified API for calling methods without manually building registries:
+
+```typescript
+import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import { createConnectTransport } from "@connectrpc/connect-node";
+
+const transport = createConnectTransport({
+  baseUrl: "https://api.example.com",
+  httpVersion: "2",
+});
+
+const client = createServerReflectionClient(transport);
+
+// Call unary method using full path
+const response = await client.call("mypackage.MyService/Say", {
+  sentence: "Hello, world!",
+});
+
+// Call server streaming method
+for await (const msg of client.serverStream("mypackage.MyService/SayStream", {
+  sentence: "Hello",
+})) {
+  console.log(msg);
+}
+
+// Call client streaming method
+async function* requests() {
+  yield { sentence: "Hello" };
+  yield { sentence: "World" };
+}
+const result = await client.clientStream(
+  "mypackage.MyService/SayClientStream",
+  requests(),
+);
+console.log(result);
+
+// Call bidirectional streaming method
+for await (const msg of client.bidiStream(
+  "mypackage.MyService/SayBidi",
+  requests(),
+)) {
+  console.log(msg);
+}
+```
+
+### Using Proxy-based Service Client
+
+For a more fluent API, use `service()` to get a Proxy-based client:
+
+```typescript
+const client = createServerReflectionClient(transport);
+
+// Get a service proxy
+const echo = client.service("mypackage.MyService");
+
+// Call methods directly by name (camelCase)
+const response = await echo.say({ sentence: "Hello" });
+
+// Server streaming
+for await (const msg of echo.sayServerStream({ sentence: "Hello" })) {
+  console.log(msg);
+}
+
+// Client streaming
+async function* requests() {
+  yield { sentence: "Hello" };
+  yield { sentence: "World" };
+}
+const result = await echo.sayClientStream(requests());
+console.log(result);
+
+// Bidirectional streaming
+for await (const msg of echo.sayBidi(requests())) {
+  console.log(msg);
+}
+```
+
+### Manual Method Invocation (Advanced)
+
+For more control, you can manually build the registry and use `createClient`:
 
 ```typescript
 import { createServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
@@ -265,6 +352,8 @@ console.log(formatServiceDescriptor(service));
 
 #### Client Methods
 
+**Reflection Methods:**
+
 - `listServices()` - List all available services
 - `getFileByFilename(filename)` - Get file descriptor by filename
 - `getFileContainingSymbol(symbol)` - Get file containing a symbol
@@ -273,6 +362,14 @@ console.log(formatServiceDescriptor(service));
 - `getServiceDescriptor(serviceName)` - Get service metadata
 - `getMethodDescriptor(serviceName, methodName)` - Get method metadata
 - `buildFileRegistry()` - Build complete FileRegistry
+
+**Dynamic Method Invocation:**
+
+- `call(path, request)` - Call a unary method (e.g., `"package.Service/Method"`)
+- `serverStream(path, request)` - Call a server streaming method
+- `clientStream(path, requests)` - Call a client streaming method
+- `bidiStream(path, requests)` - Call a bidirectional streaming method
+- `service(serviceName)` - Get a Proxy-based service client for fluent method calls
 
 #### Cache Methods (CachedServerReflectionClient)
 

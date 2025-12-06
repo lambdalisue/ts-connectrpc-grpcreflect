@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { Code, createRouterTransport  } from "@connectrpc/connect";
+import { Code, createRouterTransport } from "@connectrpc/connect";
 
 import { registerServerReflectionFromUint8Array } from "../server/index.js";
 
@@ -194,11 +194,15 @@ describe("ServerReflectionClient (v1alpha)", () => {
 
       // The test file descriptor we're using has dependencies
       // Verify we can access nested types across file boundaries
-      const service = registry.getService("grpc.reflection.v1alpha.ServerReflection");
+      const service = registry.getService(
+        "grpc.reflection.v1alpha.ServerReflection",
+      );
       expect(service).toBeDefined();
 
       // Verify we can access messages that might be in dependency files
-      const requestMsg = registry.getMessage("grpc.reflection.v1alpha.ServerReflectionRequest");
+      const requestMsg = registry.getMessage(
+        "grpc.reflection.v1alpha.ServerReflectionRequest",
+      );
       expect(requestMsg).toBeDefined();
       expect(requestMsg?.fields.length).toBeGreaterThan(0);
     });

@@ -92,7 +92,9 @@ const request = create(inputMessageDesc, {
   },
 });
 
-console.log('Sending request: { messageRequest: { case: "listServices", value: "" } }');
+console.log(
+  'Sending request: { messageRequest: { case: "listServices", value: "" } }',
+);
 
 // Call the bidirectional streaming method
 // For ServerReflectionInfo, we need to use async iteration

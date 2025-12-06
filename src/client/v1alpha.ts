@@ -23,7 +23,7 @@ export class ServerReflectionClient extends BaseServerReflectionClient {
     // v1alpha and v1 have identical wire format, so we can safely cast
     super(
       transport,
-      ServerReflection as unknown as Parameters<
+      ServerReflection as unknown as ConstructorParameters<
         typeof BaseServerReflectionClient
       >[1],
     );

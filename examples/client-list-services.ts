@@ -8,26 +8,37 @@
  *   npx tsx examples/client-list-services.ts
  */
 
-import { createServerReflectionClient } from "../src/client/index.js";
-import { createConnectTransport } from "@connectrpc/connect-node";
+import { ServerReflectionClient } from "../src/client/index.js";
+import {
+  createGrpcTransport,
+  Http2SessionManager,
+} from "@connectrpc/connect-node";
 
 const port = process.env.PORT || "8080";
+const baseUrl = `http://localhost:${port}`;
 
-// Create transport (Connect protocol with HTTP/2 for bidirectional streaming)
-const transport = createConnectTransport({
-  baseUrl: `http://localhost:${port}`,
+// Create session manager for HTTP/2 connection lifecycle control
+const sessionManager = new Http2SessionManager(baseUrl);
+
+// Create transport (gRPC protocol always uses HTTP/2)
+const transport = createGrpcTransport({
+  baseUrl,
   httpVersion: "2",
+  sessionManager,
 });
 
-// Create reflection client
-const client = createServerReflectionClient(transport);
+try {
+  // Create reflection client with automatic disposal
+  await using client = new ServerReflectionClient(transport);
 
-// List all services
-const services = await client.listServices();
+  // List all services
+  const services = await client.listServices();
 
-console.log("Available services:");
-services.forEach((service, i) => {
-  console.log(`  ${i + 1}. ${service}`);
-});
-
-process.exit(0);
+  console.log("Available services:");
+  services.forEach((service, i) => {
+    console.log(`  ${i + 1}. ${service}`);
+  });
+} finally {
+  // Close HTTP/2 connection
+  sessionManager.abort();
+}

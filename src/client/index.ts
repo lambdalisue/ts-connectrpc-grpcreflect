@@ -16,6 +16,9 @@ export type {
 } from "./types.js";
 export { ReflectionError } from "./types.js";
 
+// Re-export CallOptions from @connectrpc/connect for convenience
+export type { CallOptions } from "@connectrpc/connect";
+
 // Re-export dynamic invocation types
 export type { DynamicServiceProxy } from "./proxy.js";
 

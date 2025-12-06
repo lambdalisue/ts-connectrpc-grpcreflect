@@ -1,4 +1,4 @@
-import type { Client, Transport } from "@connectrpc/connect";
+import type { CallOptions, Client, Transport } from "@connectrpc/connect";
 import { Code, createClient } from "@connectrpc/connect";
 import {
   create,
@@ -129,6 +129,7 @@ export class MethodInvoker {
     const client = this.#getClient(serviceName);
     const methodFn = (client as Record<string, unknown>)[method.localName] as (
       input: unknown,
+      options?: CallOptions,
     ) => unknown;
 
     if (typeof methodFn !== "function") {
@@ -160,12 +161,17 @@ export class MethodInvoker {
    *
    * @param path - Full method path (e.g., "grpc.echo.EchoService/Say")
    * @param request - Request data as plain object
+   * @param options - Optional call options including signal for cancellation
    * @returns Response as plain object
    */
-  async call(path: string, request: unknown): Promise<unknown> {
+  async call(
+    path: string,
+    request: unknown,
+    options?: CallOptions,
+  ): Promise<unknown> {
     const { method, methodFn } = this.#getMethodInfo(path);
     const req = this.#createRequest(method.input.typeName, request);
-    return methodFn(req);
+    return methodFn(req, options);
   }
 
   /**
@@ -173,12 +179,17 @@ export class MethodInvoker {
    *
    * @param path - Full method path
    * @param request - Request data as plain object
+   * @param options - Optional call options including signal for cancellation
    * @returns Async iterable of response objects
    */
-  serverStream(path: string, request: unknown): AsyncIterable<unknown> {
+  serverStream(
+    path: string,
+    request: unknown,
+    options?: CallOptions,
+  ): AsyncIterable<unknown> {
     const { method, methodFn } = this.#getMethodInfo(path);
     const req = this.#createRequest(method.input.typeName, request);
-    return methodFn(req) as AsyncIterable<unknown>;
+    return methodFn(req, options) as AsyncIterable<unknown>;
   }
 
   /**
@@ -198,14 +209,19 @@ export class MethodInvoker {
    *
    * @param path - Full method path
    * @param requests - Async iterable of request data objects
+   * @param options - Optional call options including signal for cancellation
    * @returns Response as plain object
    */
   async clientStream(
     path: string,
     requests: AsyncIterable<unknown>,
+    options?: CallOptions,
   ): Promise<unknown> {
     const { method, methodFn } = this.#getMethodInfo(path);
-    return methodFn(this.#transformRequests(method.input.typeName, requests));
+    return methodFn(
+      this.#transformRequests(method.input.typeName, requests),
+      options,
+    );
   }
 
   /**
@@ -213,15 +229,18 @@ export class MethodInvoker {
    *
    * @param path - Full method path
    * @param requests - Async iterable of request data objects
+   * @param options - Optional call options including signal for cancellation
    * @returns Async iterable of response objects
    */
   bidiStream(
     path: string,
     requests: AsyncIterable<unknown>,
+    options?: CallOptions,
   ): AsyncIterable<unknown> {
     const { method, methodFn } = this.#getMethodInfo(path);
     return methodFn(
       this.#transformRequests(method.input.typeName, requests),
+      options,
     ) as AsyncIterable<unknown>;
   }
 }

@@ -276,4 +276,246 @@ describe("ServerReflectionClient (v1)", () => {
       expect(results.length).toBeGreaterThan(0);
     });
   });
+
+  describe("disposal", () => {
+    it("should implement AsyncDisposable interface", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+      const disposableClient = new ServerReflectionClient(transport);
+
+      // Verify we can call methods before disposal
+      const services = await disposableClient.listServices();
+      expect(services.length).toBeGreaterThan(0);
+
+      // Verify disposed is false before disposal
+      expect(disposableClient.disposed).toBe(false);
+
+      // Dispose the client
+      await disposableClient[Symbol.asyncDispose]();
+
+      // Verify disposed is true after disposal
+      expect(disposableClient.disposed).toBe(true);
+    });
+
+    it("should throw error when calling methods after disposal", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+      const disposableClient = new ServerReflectionClient(transport);
+
+      // Dispose the client
+      await disposableClient.close();
+
+      // Verify all methods throw after disposal
+      await expect(disposableClient.listServices()).rejects.toThrow("disposed");
+      await expect(
+        disposableClient.getFileByFilename("test.proto"),
+      ).rejects.toThrow("disposed");
+      await expect(
+        disposableClient.getFileContainingSymbol("test.Symbol"),
+      ).rejects.toThrow("disposed");
+      await expect(
+        disposableClient.getServiceDescriptor("test.Service"),
+      ).rejects.toThrow("disposed");
+      await expect(
+        disposableClient.getMethodDescriptor("test.Service", "Method"),
+      ).rejects.toThrow("disposed");
+      await expect(disposableClient.buildFileRegistry()).rejects.toThrow(
+        "disposed",
+      );
+      await expect(
+        disposableClient.call("test.Service/Method", {}),
+      ).rejects.toThrow("disposed");
+    });
+
+    it("should support multiple dispose calls (idempotent)", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+      const disposableClient = new ServerReflectionClient(transport);
+
+      // Dispose multiple times should not throw
+      await disposableClient.close();
+      await disposableClient.close();
+      await disposableClient[Symbol.asyncDispose]();
+
+      expect(disposableClient.disposed).toBe(true);
+    });
+
+    it("should work with await using syntax", async () => {
+      // Load test file descriptor data
+      const fileDescriptorData = readFileSync(
+        join(__dirname, "../_gen/file_descriptor.binpb"),
+      );
+
+      // Create test server with reflection
+      const routes = (router: ReturnType<typeof createConnectRouter>) => {
+        registerServerReflectionFromUint8Array(router, fileDescriptorData);
+        return router;
+      };
+
+      const transport = createRouterTransport(routes);
+
+      let clientRef: ServerReflectionClient | undefined;
+
+      {
+        await using disposableClient = new ServerReflectionClient(transport);
+        clientRef = disposableClient;
+
+        // Should work inside the block
+        const services = await disposableClient.listServices();
+        expect(services.length).toBeGreaterThan(0);
+        expect(disposableClient.disposed).toBe(false);
+      }
+
+      // After the block, client should be disposed
+      expect(clientRef!.disposed).toBe(true);
+      await expect(clientRef!.listServices()).rejects.toThrow("disposed");
+    });
+  });
+
+  describe("signal option", () => {
+    it("should accept signal option in listServices", async () => {
+      const abortController = new AbortController();
+      const services = await client.listServices({
+        signal: abortController.signal,
+      });
+      expect(services.length).toBeGreaterThan(0);
+    });
+
+    it("should accept signal option in getFileByFilename", async () => {
+      const abortController = new AbortController();
+      const file = await client.getFileByFilename("v1/reflection.proto", {
+        signal: abortController.signal,
+      });
+      expect(file).toBeDefined();
+    });
+
+    it("should accept signal option in getServiceDescriptor", async () => {
+      const abortController = new AbortController();
+      const service = await client.getServiceDescriptor(
+        "grpc.reflection.v1.ServerReflection",
+        { signal: abortController.signal },
+      );
+      expect(service).toBeDefined();
+    });
+
+    it("should cancel request when signal is aborted", async () => {
+      const abortController = new AbortController();
+      // Abort immediately
+      abortController.abort();
+
+      await expect(
+        client.listServices({ signal: abortController.signal }),
+      ).rejects.toThrow();
+    });
+
+    it("should accept signal option in call()", async () => {
+      const abortController = new AbortController();
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      // First verify call works without signal
+      const responses = client.bidiStream(
+        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+        requests(),
+        { signal: abortController.signal },
+      );
+
+      const results: unknown[] = [];
+      for await (const response of responses) {
+        results.push(response);
+        break; // Only need first response
+      }
+      expect(results.length).toBeGreaterThan(0);
+    });
+
+    it("should cancel bidiStream when signal is aborted", async () => {
+      const abortController = new AbortController();
+      // Abort immediately
+      abortController.abort();
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      const responses = client.bidiStream(
+        "grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+        requests(),
+        { signal: abortController.signal },
+      );
+
+      await expect(async () => {
+        for await (const _response of responses) {
+          // Should not reach here
+        }
+      }).rejects.toThrow();
+    });
+
+    it("should accept signal option in service() proxy", async () => {
+      const abortController = new AbortController();
+
+      const proxy = client.service("grpc.reflection.v1.ServerReflection");
+
+      async function* requests() {
+        yield {
+          messageRequest: {
+            case: "listServices",
+            value: "",
+          },
+        };
+      }
+
+      const responses = proxy.serverReflectionInfo(requests(), {
+        signal: abortController.signal,
+      });
+
+      const results: unknown[] = [];
+      for await (const response of responses as AsyncIterable<unknown>) {
+        results.push(response);
+        break; // Only need first response
+      }
+      expect(results.length).toBeGreaterThan(0);
+    });
+  });
 });

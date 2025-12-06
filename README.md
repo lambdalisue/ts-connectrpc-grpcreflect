@@ -403,6 +403,83 @@ import { v1alpha } from "@lambdalisue/connectrpc-grpcreflect/client";
 const client = new v1alpha.ServerReflectionClient(transport);
 ```
 
+## Resource Management
+
+### Client Disposal
+
+`ServerReflectionClient` and `CachedServerReflectionClient` implement the `AsyncDisposable` interface for proper resource cleanup. This cancels any in-flight requests when the client is disposed.
+
+```typescript
+// Using await using (recommended)
+{
+  await using client = new ServerReflectionClient(transport);
+  const services = await client.listServices();
+  // Client is automatically disposed when leaving this block
+}
+
+// Or manually close
+const client = new ServerReflectionClient(transport);
+try {
+  const services = await client.listServices();
+} finally {
+  await client.close();
+}
+```
+
+### Request Cancellation
+
+All client methods accept an optional `CallOptions` parameter for individual request cancellation:
+
+```typescript
+const abortController = new AbortController();
+
+// Cancel the request after 5 seconds
+setTimeout(() => abortController.abort(), 5000);
+
+try {
+  const services = await client.listServices({
+    signal: abortController.signal,
+  });
+} catch (error) {
+  if (error.name === "AbortError") {
+    console.log("Request was cancelled");
+  }
+}
+```
+
+### Closing HTTP/2 Connections
+
+The `ServerReflectionClient` receives a `Transport` instance, but the `Transport` interface in ConnectRPC does not expose a method to close the underlying HTTP/2 connection. To properly close HTTP/2 connections, you need to manage the session at the transport level using `Http2SessionManager`:
+
+```typescript
+import { createGrpcTransport } from "@connectrpc/connect-node";
+import { Http2SessionManager } from "@connectrpc/connect-node";
+
+// Create a session manager for connection lifecycle control
+const sessionManager = new Http2SessionManager("https://api.example.com");
+
+const transport = createGrpcTransport({
+  baseUrl: "https://api.example.com",
+  sessionManager, // Pass the session manager
+});
+
+const client = new ServerReflectionClient(transport);
+
+try {
+  const services = await client.listServices();
+  console.log(services);
+} finally {
+  // Close the client (cancels in-flight requests)
+  await client.close();
+
+  // Close the HTTP/2 connection
+  sessionManager.abort();
+}
+```
+
+> [!NOTE]
+> The `Http2SessionManager.abort()` method closes all HTTP/2 sessions managed by that instance. If you're sharing a transport across multiple clients, only call `abort()` when all clients are done.
+
 ## Package Structure
 
 ```

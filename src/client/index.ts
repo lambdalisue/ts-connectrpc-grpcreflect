@@ -1,8 +1,11 @@
-// Re-export main client class
-export { ServerReflectionClient } from "./v1.js";
+// Re-export main client class with auto-fallback
+export { ServerReflectionClient } from "./server_reflection_client.js";
 
-// Re-export cached client
-export { CachedServerReflectionClient } from "./cached.js";
+// Re-export cached client and interface
+export {
+  CachedServerReflectionClient,
+  type IServerReflectionClient,
+} from "./cached.js";
 
 // Re-export dynamic dispatch clients
 export { DynamicDispatchClient } from "./dynamic_dispatch_client.js";

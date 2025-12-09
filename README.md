@@ -334,12 +334,18 @@ console.log(response.sentence);
 
 ### Using Cached Client
 
-Reduce network calls by caching file and service descriptors:
+Reduce network calls by caching file and service descriptors. The cached client wraps any reflection client:
 
 ```typescript
-import { CachedServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+import {
+  ServerReflectionClient,
+  CachedServerReflectionClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
 
-const client = new CachedServerReflectionClient(transport);
+// Wrap the auto-detecting client with caching
+const client = new CachedServerReflectionClient(
+  new ServerReflectionClient(transport),
+);
 
 // First call - fetches from server
 const service1 = await client.getServiceDescriptor("mypackage.MyService");
@@ -353,6 +359,84 @@ console.log(`Hits: ${stats.hits}, Misses: ${stats.misses}`);
 
 // Clear cache when needed
 client.clearCache();
+```
+
+You can also wrap version-specific clients:
+
+```typescript
+import {
+  v1,
+  CachedServerReflectionClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
+
+// Wrap v1-only client with caching
+const client = new CachedServerReflectionClient(
+  new v1.ServerReflectionClient(transport),
+);
+```
+
+### Automatic Version Detection
+
+The `ServerReflectionClient` (default export) automatically detects which reflection protocol version (v1 or v1alpha) your server supports. This ensures compatibility with both modern servers (v1) and legacy servers (v1alpha) without manual configuration.
+
+**How it works:**
+
+1. On first use, the client tries v1 protocol first (recommended by gRPC spec)
+2. If the server returns `UNIMPLEMENTED`, it automatically falls back to v1alpha
+3. The detected version is cached for subsequent calls
+
+**Example:**
+
+```typescript
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+const client = new ServerReflectionClient(transport);
+
+// Automatically detects and uses the correct protocol version
+const services = await client.listServices();
+
+// Check which version was detected
+console.log(`Using protocol: ${client.detectedVersion}`); // "v1" or "v1alpha"
+```
+
+**With Caching:**
+
+```typescript
+import {
+  ServerReflectionClient,
+  CachedServerReflectionClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
+
+// Combine auto-detection with caching
+const client = new CachedServerReflectionClient(
+  new ServerReflectionClient(transport),
+);
+
+const services = await client.listServices();
+```
+
+**Manual Version Selection:**
+
+If you need to use a specific protocol version, you can bypass auto-detection:
+
+```typescript
+import { v1, v1alpha } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+// Force v1 protocol
+const v1Client = new v1.ServerReflectionClient(transport);
+
+// Force v1alpha protocol
+const v1alphaClient = new v1alpha.ServerReflectionClient(transport);
+
+// With caching
+import { CachedServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+const cachedV1Client = new CachedServerReflectionClient(
+  new v1.ServerReflectionClient(transport),
+);
+const cachedV1alphaClient = new CachedServerReflectionClient(
+  new v1alpha.ServerReflectionClient(transport),
+);
 ```
 
 ### Formatting Utilities
@@ -385,10 +469,16 @@ console.log(formatServiceDescriptor(service));
 
 #### Classes
 
-- `ServerReflectionClient` - Reflection-only client for v1 protocol (implements `AsyncDisposable`)
-- `CachedServerReflectionClient` - Client with caching support (implements `AsyncDisposable`)
+- `ServerReflectionClient` - Default client with automatic v1/v1alpha version detection (implements `AsyncDisposable`)
+- `CachedServerReflectionClient` - Wraps any `IServerReflectionClient` to add caching support (implements `AsyncDisposable`)
 - `DynamicDispatchClient` - Dynamic method invocation by service/method name
 - `ProxyDispatchClient` - Proxy-based method invocation via property access
+- `v1.ServerReflectionClient` - v1-only reflection client (implements `AsyncDisposable`)
+- `v1alpha.ServerReflectionClient` - v1alpha-only reflection client (implements `AsyncDisposable`)
+
+#### Interfaces
+
+- `IServerReflectionClient` - Interface for all reflection clients, used by `CachedServerReflectionClient`
 
 #### ServerReflectionClient Methods
 
@@ -434,6 +524,11 @@ for await (const msg of echo.sayStream({ sentence: "Hello" })) { ... } // Stream
 - `getCacheStats()` - Get cache statistics
 - `resetCacheStats()` - Reset statistics
 
+#### ServerReflectionClient Properties
+
+- `detectedVersion` - Get detected protocol version ("v1" or "v1alpha", undefined before initialization)
+- `disposed` - Returns whether the client has been disposed
+
 #### Utilities
 
 - `formatServiceList(services)` - Format service list
@@ -442,14 +537,32 @@ for await (const msg of echo.sayStream({ sentence: "Hello" })) { ... } // Stream
 
 ### Protocol Versions
 
-Both v1 and v1alpha protocols are supported:
+Both v1 and v1alpha protocols are supported. The `ServerReflectionClient` (default export) automatically detects and uses the appropriate version.
+
+**Automatic Detection (Recommended):**
 
 ```typescript
-// Using v1 (recommended)
+import { ServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+// Automatically detects v1 or v1alpha
+const client = new ServerReflectionClient(transport);
+
+// With caching
+import { CachedServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+const cachedClient = new CachedServerReflectionClient(
+  new ServerReflectionClient(transport),
+);
+```
+
+**Manual Version Selection:**
+
+```typescript
+// Force v1 protocol
 import { v1 } from "@lambdalisue/connectrpc-grpcreflect/client";
 const client = new v1.ServerReflectionClient(transport);
 
-// Using v1alpha
+// Force v1alpha protocol
 import { v1alpha } from "@lambdalisue/connectrpc-grpcreflect/client";
 const client = new v1alpha.ServerReflectionClient(transport);
 ```
@@ -559,6 +672,55 @@ import {
 // Common utilities
 import { getFileByFilename } from "@lambdalisue/connectrpc-grpcreflect/common";
 ```
+
+## Migration Guide
+
+### Migrating from Older Versions
+
+#### CachedServerReflectionClient Constructor Change
+
+In newer versions, `CachedServerReflectionClient` no longer accepts a `Transport` directly. Instead, it wraps any `IServerReflectionClient` instance.
+
+**Before (Old API):**
+
+```typescript
+import { CachedServerReflectionClient } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+const client = new CachedServerReflectionClient(transport);
+```
+
+**After (New API - Recommended):**
+
+```typescript
+import {
+  ServerReflectionClient,
+  CachedServerReflectionClient,
+} from "@lambdalisue/connectrpc-grpcreflect/client";
+
+// Option 1: With automatic v1/v1alpha detection (recommended)
+const client = new CachedServerReflectionClient(
+  new ServerReflectionClient(transport),
+);
+
+// Option 2: With specific version
+import { v1 } from "@lambdalisue/connectrpc-grpcreflect/client";
+
+const client = new CachedServerReflectionClient(
+  new v1.ServerReflectionClient(transport),
+);
+```
+
+**Benefits of the new architecture:**
+
+- **Separation of Concerns**: Caching and version detection are now separate responsibilities
+- **Flexibility**: You can wrap any reflection client (v1, v1alpha, or custom)
+- **Composability**: Easier to combine different client behaviors
+
+**No changes required for:**
+
+- `ServerReflectionClient` from default export (now includes auto-fallback)
+- `v1.ServerReflectionClient` (v1-only)
+- `v1alpha.ServerReflectionClient` (v1alpha-only)
 
 ## Development
 

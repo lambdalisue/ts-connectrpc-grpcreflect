@@ -8,6 +8,7 @@ import { createRouterTransport } from "@connectrpc/connect";
 
 import { registerServerReflectionFromUint8Array } from "../server/index.js";
 
+import { ServerReflectionClient } from "./server_reflection_client.js";
 import { CachedServerReflectionClient } from "./cached.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -30,7 +31,10 @@ describe("CachedServerReflectionClient", () => {
 
     // Create client with in-memory transport
     const transport = createRouterTransport(routes);
-    client = new CachedServerReflectionClient(transport);
+    // Wrap ServerReflectionClient with CachedServerReflectionClient
+    client = new CachedServerReflectionClient(
+      new ServerReflectionClient(transport),
+    );
   });
 
   describe("caching behavior", () => {
@@ -217,7 +221,9 @@ describe("CachedServerReflectionClient", () => {
       };
 
       const transport = createRouterTransport(routes);
-      const disposableClient = new CachedServerReflectionClient(transport);
+      const disposableClient = new CachedServerReflectionClient(
+        new ServerReflectionClient(transport),
+      );
 
       // Populate cache
       await disposableClient.getFileByFilename("v1/reflection.proto");
@@ -257,7 +263,7 @@ describe("CachedServerReflectionClient", () => {
 
       {
         await using disposableClient = new CachedServerReflectionClient(
-          transport,
+          new ServerReflectionClient(transport),
         );
         clientRef = disposableClient;
 

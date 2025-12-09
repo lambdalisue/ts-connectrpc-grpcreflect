@@ -8,7 +8,10 @@
  *   npx tsx examples/client-cached.ts
  */
 
-import { CachedServerReflectionClient } from "../src/client/index.js";
+import {
+  ServerReflectionClient,
+  CachedServerReflectionClient,
+} from "../src/client/index.js";
 import {
   createGrpcTransport,
   Http2SessionManager,
@@ -29,7 +32,10 @@ const transport = createGrpcTransport({
 
 try {
   // Create cached client with automatic disposal
-  await using client = new CachedServerReflectionClient(transport);
+  // Wrap ServerReflectionClient (with auto-fallback) with caching
+  await using client = new CachedServerReflectionClient(
+    new ServerReflectionClient(transport),
+  );
 
   // First call - fetches from server
   console.log("Fetching services (first call)...");
